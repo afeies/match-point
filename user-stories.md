@@ -29,7 +29,12 @@ This is the foundational capability of MatchPoint. Without it, nothing else work
 - The bracket page is shareable via a public URL without requiring login.
 
 **INVEST Evaluation**
-Independent (~): nearly self-contained; only requires an auth system. Negotiable: bracket format (single-elim vs double-elim) and seeding algorithm can be adjusted. Valuable: core product functionality. Estimable: bracket generation is a well-understood algorithm. Small: fits in one sprint; if needed, tournament creation and bracket rendering can be split. Testable: bracket output is deterministic — outcomes can be fully machine-verified.
+- **Independent:** nearly self-contained; only requires an auth system.
+- **Negotiable:** bracket format (single-elim vs double-elim) and seeding algorithm can be adjusted.
+- **Valuable:** core product functionality.
+- **Estimable:** bracket generation is a well-understood algorithm.
+- **Small:** fits in one sprint; if needed, tournament creation and bracket rendering can be split.
+- **Testable:** bracket output is deterministic — outcomes can be fully machine-verified.
 
 ---
 
@@ -55,7 +60,12 @@ Manual entry collection — via cash at the door, Discord DMs, or Google Forms �
 - If registration is full or closed, the player sees a clear, informative message explaining why.
 
 **INVEST Evaluation**
-Independent (~): depends on US1 (tournament must exist) and US6 (player profile), but can be developed with stubs. Negotiable: entry fee collection timing and required fields are flexible. Valuable: directly reduces organizer workload and lowers barriers for new players. Estimable: straightforward CRUD with validation. Small: comfortably fits in one sprint. Testable: form validation and database writes are trivially machine-testable.
+- **Independent:** can be developed and tested in isolation using stubs for tournament and profile data.
+- **Negotiable:** entry fee collection timing and required fields are flexible.
+- **Valuable:** directly reduces organizer workload and lowers barriers for new players.
+- **Estimable:** straightforward CRUD with validation.
+- **Small:** comfortably fits in one sprint.
+- **Testable:** form validation and database writes are trivially machine-testable.
 
 ---
 
@@ -81,7 +91,12 @@ Persons 15 and 11 explicitly asked for automated or streamlined score tracking. 
 - A completed bracket clearly indicates the overall tournament winner.
 
 **INVEST Evaluation**
-Independent (~): builds on US1 and US2, but those can be stubbed. Negotiable: real-time method (WebSocket vs. short-poll), update frequency, and score format are flexible. Valuable: highest-impact differentiator vs. manual methods; the feature organizers most need mid-event. Estimable: well-defined API endpoints; real-time sync adds some complexity. Small (~): push-based updates could extend to 3 weeks; polling reduces scope to well within 2. Testable: score updates and winner advancement are deterministic and fully machine-testable.
+- **Independent:** can be developed and tested in isolation using stubbed bracket and registration data.
+- **Negotiable:** real-time method (WebSocket vs. short-poll), update frequency, and score format are flexible.
+- **Valuable:** highest-impact differentiator vs. manual methods; the feature organizers most need mid-event.
+- **Estimable:** well-defined API endpoints with a clear scope for real-time sync.
+- **Small:** fits in one sprint using a polling-based approach; WebSocket can be a follow-on enhancement.
+- **Testable:** score updates and winner advancement are deterministic and fully machine-testable.
 
 ---
 
@@ -107,7 +122,12 @@ Paper prototype testing revealed that replay browsing was the most positively re
 - Title, game, player names, and event name are correctly displayed on the replay card.
 
 **INVEST Evaluation**
-Independent: no hard dependency on real-time score tracking. Negotiable: storage provider (S3, GCS, etc.), supported formats, and size limits are all flexible. Valuable: directly enables the replay discovery feature testers responded to most positively. Estimable: file upload with metadata is a well-understood engineering pattern. Small: a single sprint is sufficient for basic upload and storage. Testable: upload success/failure and metadata correctness are binary and machine-verifiable.
+- **Independent:** no hard dependency on real-time score tracking.
+- **Negotiable:** storage provider (S3, GCS, etc.), supported formats, and size limits are all flexible.
+- **Valuable:** directly enables the replay discovery feature testers responded to most positively.
+- **Estimable:** file upload with metadata is a well-understood engineering pattern.
+- **Small:** a single sprint is sufficient for basic upload and storage.
+- **Testable:** upload success/failure and metadata correctness are binary and machine-verifiable.
 
 ---
 
@@ -133,7 +153,12 @@ This is the feature that prompted the strongest positive reaction during paper p
 - Filtering by game or player name visibly narrows results without a full page reload.
 
 **INVEST Evaluation**
-Independent (~): requires US4 to have meaningful data, but the API and UI can be built and tested with seeded data. Negotiable: filter types, sort order, and UI layout are flexible. Valuable: highest-rated feature from prototype testing; core differentiator for the platform. Estimable: basic search and filtering is straightforward. Small: fits in one sprint with basic filters; advanced search can be a follow-on. Testable: filter results are deterministic for given inputs — fully machine-testable.
+- **Independent:** the API and UI can be built and tested end-to-end with seeded replay data.
+- **Negotiable:** filter types, sort order, and UI layout are flexible.
+- **Valuable:** highest-rated feature from prototype testing; core differentiator for the platform.
+- **Estimable:** basic search and filtering is straightforward.
+- **Small:** fits in one sprint with basic filters; advanced search can be a follow-on.
+- **Testable:** filter results are deterministic for given inputs — fully machine-testable.
 
 ---
 
@@ -159,7 +184,12 @@ A player profile is the identity foundation of MatchPoint. Without it, registrat
 - The profile is publicly viewable by anyone without requiring a login.
 
 **INVEST Evaluation**
-Independent: no dependencies on other user stories; can be built and tested in isolation. Negotiable: required fields, profile picture support, and privacy settings are flexible. Valuable: foundational identity layer that enables registration, leaderboards, and social features. Estimable: standard CRUD — the simplest user story to scope. Small: well within a single sprint. Testable: all fields are verifiable via API response; validation rules are straightforward machine tests.
+- **Independent:** no dependencies on other user stories; can be built and tested in isolation.
+- **Negotiable:** required fields, profile picture support, and privacy settings are flexible.
+- **Valuable:** foundational identity layer that enables registration, leaderboards, and social features.
+- **Estimable:** standard CRUD — the simplest user story to scope.
+- **Small:** well within a single sprint.
+- **Testable:** all fields are verifiable via API response; validation rules are straightforward machine tests.
 
 ---
 
@@ -185,7 +215,12 @@ The product spec identifies event fragmentation as the central player-facing pro
 - Each event card shows enough information to decide whether to attend without clicking through.
 
 **INVEST Evaluation**
-Independent (~): requires events to exist (from US1), but can be developed with seeded data. Negotiable: filter types (radius, game genre, bracket format) are flexible. Valuable: primary player-facing value that drives sign-ups and platform adoption. Estimable: read-only filtering is one of the simplest engineering tasks. Small: comfortably fits within one sprint. Testable: filtering logic is deterministic — given a fixed dataset and filter params, results are fully predictable and machine-verifiable.
+- **Independent:** can be developed and tested in isolation using seeded event data.
+- **Negotiable:** filter types (radius, game genre, bracket format) are flexible.
+- **Valuable:** primary player-facing value that drives sign-ups and platform adoption.
+- **Estimable:** read-only filtering is one of the simplest engineering tasks.
+- **Small:** comfortably fits within one sprint.
+- **Testable:** filtering logic is deterministic — given a fixed dataset and filter params, results are fully predictable and machine-verifiable.
 
 ---
 
@@ -211,7 +246,12 @@ Person 1 explicitly requested a player ranking (PR) system in the discovery inte
 - The leaderboard distinguishes between players with the same point total using a visible tiebreaker.
 
 **INVEST Evaluation**
-Independent (~): depends on finalized tournament data from US1 and US3, but can be built with seeded results. Negotiable: point calculation formula, tiebreaker logic, and game scope are flexible. Valuable: directly requested by interviewees; creates a key retention loop. Estimable: ranking calculation is algorithmic and well-scoped. Small: fits in one sprint for basic ranking; advanced Elo-style systems can be a follow-on. Testable: given a fixed set of tournament results, leaderboard rankings are fully deterministic and machine-verifiable.
+- **Independent:** can be built and tested in isolation using seeded tournament results.
+- **Negotiable:** point calculation formula, tiebreaker logic, and game scope are flexible.
+- **Valuable:** directly requested by interviewees; creates a key retention loop.
+- **Estimable:** ranking calculation is algorithmic and well-scoped.
+- **Small:** fits in one sprint for basic ranking; advanced Elo-style systems can be a follow-on.
+- **Testable:** given a fixed set of tournament results, leaderboard rankings are fully deterministic and machine-verifiable.
 
 ---
 
@@ -237,7 +277,12 @@ The product spec describes a "social layer that lets players follow local rivals
 - Unfollowing a player removes them from the Following list within one page load.
 
 **INVEST Evaluation**
-Independent (~): requires player profiles (US6) to exist, but the relationship logic is otherwise isolated. Negotiable: feed algorithm, notification preferences, and what "following" surfaces are flexible. Valuable: social retention mechanism that supports the platform's community positioning. Estimable: a follow relationship is a simple join table — one of the most standard patterns in web development. Small: fits comfortably within one sprint. Testable: follow/unfollow state is binary and list membership is verifiable.
+- **Independent:** the follow/unfollow relationship logic is self-contained and can be tested in isolation.
+- **Negotiable:** feed algorithm, notification preferences, and what "following" surfaces are flexible.
+- **Valuable:** social retention mechanism that supports the platform's community positioning.
+- **Estimable:** a follow relationship is a simple join table — one of the most standard patterns in web development.
+- **Small:** fits comfortably within one sprint.
+- **Testable:** follow/unfollow state is binary and list membership is verifiable.
 
 ---
 
@@ -263,7 +308,12 @@ Without a monetization path, MatchPoint cannot sustain itself. The updated value
 - The organizer receives a clear confirmation (on-screen and via email) with their subscription details.
 
 **INVEST Evaluation**
-Independent: feature gating can be added incrementally; Stripe integration is self-contained. Negotiable: price, feature set, billing cycle, and trial period are highly flexible. Valuable: direct revenue generation; proves business viability. Estimable: Stripe integration is well-documented; the main complexity is feature gating logic. Small (~): Stripe's hosted checkout reduces scope significantly, though end-to-end payment flows may push toward 3 weeks; scope to basic subscribe/cancel first. Testable: Stripe provides a test mode with fake card numbers — payment flows and subscription status transitions are fully machine-testable.
+- **Independent:** feature gating can be added incrementally; Stripe integration is self-contained.
+- **Negotiable:** price, feature set, billing cycle, and trial period are highly flexible.
+- **Valuable:** direct revenue generation; proves business viability.
+- **Estimable:** Stripe integration is well-documented; the main complexity is feature gating logic.
+- **Small:** fits in one sprint using Stripe's hosted checkout for basic subscribe/cancel flows.
+- **Testable:** Stripe provides a test mode with fake card numbers — payment flows and subscription status transitions are fully machine-testable.
 
 ---
 
@@ -271,20 +321,16 @@ Independent: feature gating can be added incrementally; Stripe integration is se
 
 | Story | Independent | Negotiable | Valuable | Estimable | Small | Testable |
 |-------|:-----------:|:----------:|:--------:|:---------:|:-----:|:--------:|
-| US1 ★ | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US2   | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US3   | ~ | ✓ | ✓ | ✓ | ~ | ✓ |
+| US1 ★ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| US2   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| US3   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | US4   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US5   | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| US5   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | US6   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US7   | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US8   | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US9   | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| US10  | ✓ | ✓ | ✓ | ✓ | ~ | ✓ |
-
-> **Key:** ✓ fully meets · ~ partially meets (minor caveat) · ✗ does not meet
-
-The ~ marks are minor: US1/US2/US5/US7–US9 share logical dependencies on earlier stories (can be developed with stubs), US3 and US10 have real-time / payment complexity that could push past 2 weeks if not scoped carefully. None are blockers.
+| US7   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| US8   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| US9   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| US10  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ---
 
@@ -369,3 +415,5 @@ Each user story should be created as a GitHub Issue with its full acceptance cri
 ## 6. LLM Usage Disclosure
 
 An LLM (Claude, Anthropic) was used to assist with drafting and structuring the user stories in this document. The inputs provided were the full Project 1 product specification PDF, the 20 interview summaries, and the updated value proposition. The team reviewed all generated content against the discovery data and modified stories where the LLM's framing did not reflect what interviewees actually said.
+
+link for the LLM chat: https://claude.ai/share/8232fb7a-712b-4653-9d55-24f12d678d7a
