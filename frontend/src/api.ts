@@ -1,0 +1,168 @@
+export type UserRole = "organizer" | "player";
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+}
+
+export interface TournamentSummary {
+  id: string;
+  name: string;
+  game: string;
+  entrantCount: number;
+  createdAt: string;
+}
+
+export interface TournamentDetail extends TournamentSummary {
+  entrants: { userId: string; displayName: string; registeredAt: string }[];
+}
+
+export interface BracketPlayer {
+  userId: string;
+  displayName: string;
+}
+
+export interface BracketMatch {
+  id: string;
+  round: number;
+  slot: number;
+  player1: BracketPlayer | null;
+  player2: BracketPlayer | null;
+  advancesToMatchId: string | null;
+}
+
+export interface BracketRound {
+  round: number;
+  matches: BracketMatch[];
+}
+
+export interface BracketResponse {
+  tournamentId: string;
+  playerCount: number;
+  roundCount: number;
+  rounds: BracketRound[];
+}
+
+const jsonHeaders = {
+  "Content-Type": "application/json",
+};
+
+function getStoredToken(): string | null {
+  return localStorage.getItem("mp_token");
+}
+
+export function setStoredToken(token: string | null): void {
+  if (token) localStorage.setItem("mp_token", token);
+  else localStorage.removeItem("mp_token");
+}
+
+function errorMessage(data: unknown, status: number): string {
+  if (data && typeof data === "object" && "error" in data) {
+    const e = (data as { error: unknown }).error;
+    if (typeof e === "string") return e;
+    return "Validation failed";
+  }
+  return `Request failed (${status})`;
+}
+
+type ApiInit = RequestInit & { auth?: boolean };
+
+async function request<T>(path: string, init: ApiInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type") && init.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  const sendAuth = init.auth !== false;
+  const token = sendAuth ? getStoredToken() : null;
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(path, { ...init, headers });
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(text || res.statusText);
+  }
+
+  if (!res.ok) {
+    throw new Error(errorMessage(data, res.status));
+  }
+  return data as T;
+}
+
+export const api = {
+  register(body: {
+    email: string;
+    password: string;
+    displayName: string;
+    role: UserRole;
+  }): Promise<{ token: string; user: AuthUser }> {
+    return request("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: jsonHeaders,
+      auth: false,
+    });
+  },
+
+  login(body: { email: string; password: string }): Promise<{ token: string; user: AuthUser }> {
+    return request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: jsonHeaders,
+      auth: false,
+    });
+  },
+
+  listTournaments(): Promise<TournamentSummary[]> {
+    return request("/api/tournaments", { auth: false });
+  },
+
+  getTournament(id: string): Promise<TournamentDetail> {
+    return request(`/api/tournaments/${id}`, { auth: false });
+  },
+
+  createTournament(body: { name: string; game: string }): Promise<{ id: string; name: string; game: string }> {
+    return request("/api/tournaments", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: jsonHeaders,
+    });
+  },
+
+  registerForTournament(tournamentId: string): Promise<unknown> {
+    return request(`/api/tournaments/${tournamentId}/register`, {
+      method: "POST",
+      body: "{}",
+      headers: jsonHeaders,
+    });
+  },
+
+  generateBracket(tournamentId: string): Promise<BracketResponse> {
+    return request(`/api/tournaments/${tournamentId}/bracket`, {
+      method: "POST",
+      body: "{}",
+      headers: jsonHeaders,
+    });
+  },
+
+  /** Public: returns null if bracket has not been published yet. */
+  async getTournamentBracket(tournamentId: string): Promise<BracketResponse | null> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bracket`);
+    if (res.status === 404) return null;
+    const text = await res.text();
+    let data: unknown = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error("Invalid response");
+    }
+    if (!res.ok) {
+      throw new Error(errorMessage(data, res.status));
+    }
+    return data as BracketResponse;
+  },
+};

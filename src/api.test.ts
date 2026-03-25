@@ -29,6 +29,23 @@ async function register(
   return { token: res.body.token as string, email };
 }
 
+describe("GET /api/tournaments", () => {
+  it("lists tournaments with entrant counts", async () => {
+    const app = createApp();
+    const { token } = await register(app, "organizer", "o");
+    await request(app)
+      .post("/api/tournaments")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "A", game: "G" });
+    const res = await request(app).get("/api/tournaments");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBe(1);
+    expect(res.body[0]).toMatchObject({ name: "A", game: "G", entrantCount: 0 });
+    expect(typeof res.body[0].id).toBe("string");
+  });
+});
+
 describe("POST /api/tournaments", () => {
   it("returns 201 with id, name, game for organizer", async () => {
     const app = createApp();
@@ -60,6 +77,43 @@ describe("POST /api/tournaments", () => {
     const app = createApp();
     const res = await request(app).post("/api/tournaments").send({ name: "X", game: "Y" });
     expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/tournaments/:id/bracket", () => {
+  it("returns 404 when bracket has not been generated", async () => {
+    const app = createApp();
+    const { token } = await register(app, "organizer", "o");
+    const tRes = await request(app)
+      .post("/api/tournaments")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "X", game: "Y" });
+    const tid = tRes.body.id as string;
+    const res = await request(app).get(`/api/tournaments/${tid}/bracket`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns stored bracket without auth after organizer generates it", async () => {
+    const app = createApp();
+    const { token } = await register(app, "organizer", "o");
+    const tRes = await request(app)
+      .post("/api/tournaments")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "X", game: "Y" });
+    const tid = tRes.body.id as string;
+    const postRes = await request(app)
+      .post(`/api/tournaments/${tid}/bracket`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        players: [
+          { userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", displayName: "A" },
+          { userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", displayName: "B" },
+        ],
+      });
+    expect(postRes.status).toBe(200);
+    const getRes = await request(app).get(`/api/tournaments/${tid}/bracket`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body).toEqual(postRes.body);
   });
 });
 
