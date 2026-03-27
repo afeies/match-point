@@ -10,6 +10,7 @@ import { TournamentDetailPage } from "./pages/TournamentDetail";
 import { TournamentHubPage } from "./pages/TournamentHubPage";
 import { TournamentBracketPage } from "./pages/TournamentBracketPage";
 import { PlayerProfilePage } from "./pages/PlayerProfilePage";
+import { PlayersPage } from "./pages/PlayersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 export default function App() {
@@ -50,7 +51,7 @@ export default function App() {
             <Route path="/t/:id/bracket" element={<TournamentBracketPage />} />
             <Route path="/tournament" element={<TournamentHubPage />} />
             <Route path="/tournaments" element={<Navigate to="/tournament" replace />} />
-            <Route path="/players" element={<PlayerProfilePage />} />
+            <Route path="/players" element={<PlayersPage />} />
             <Route path="/players/:id" element={<PlayerProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/new" element={<NewTournament />} />

@@ -195,7 +195,6 @@ export const api = {
     }
     return data as BracketResponse;
   },
-};
 
   getUser(id: string): Promise<UserProfile> {
     return request(`/api/users/${id}`, { auth: false });
