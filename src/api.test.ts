@@ -236,10 +236,12 @@ describe("POST /api/tournaments/:id/bracket", () => {
 
     await request(app)
       .post(`/api/tournaments/${tid}/register`)
-      .set("Authorization", `Bearer ${p1}`);
+      .set("Authorization", `Bearer ${p1}`)
+      .send({ displayName: "player p1", gameSelection: "Tekken 8" });
     await request(app)
       .post(`/api/tournaments/${tid}/register`)
-      .set("Authorization", `Bearer ${p2}`);
+      .set("Authorization", `Bearer ${p2}`)
+      .send({ displayName: "player p2", gameSelection: "Tekken 8" });
 
     const res = await request(app)
       .post(`/api/tournaments/${tid}/bracket`)
@@ -249,5 +251,236 @@ describe("POST /api/tournaments/:id/bracket", () => {
     expect(res.status).toBe(200);
     expect(res.body.playerCount).toBe(2);
     expect(res.body.roundCount).toBe(1);
+  });
+});
+
+/* ================================================================== */
+/*  Player Registration – POST /api/tournaments/:id/register          */
+/* ================================================================== */
+describe("POST /api/tournaments/:id/register", () => {
+  async function createTournamentAsOrg(
+    app: ReturnType<typeof createApp>,
+    opts?: { maxEntrants?: number }
+  ) {
+    const { token } = await register(app, "organizer", "org");
+    const tRes = await request(app)
+      .post("/api/tournaments")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Weekly", game: "Street Fighter 6", ...opts });
+    return { orgToken: token, tid: tRes.body.id as string };
+  }
+
+  it("returns 201 and a registration record on valid registration", async () => {
+    const app = createApp();
+    const { tid } = await createTournamentAsOrg(app);
+    const { token } = await register(app, "player", "p1");
+
+    const res = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "SonicFox", gameSelection: "Street Fighter 6" });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      tournamentId: tid,
+      displayName: "SonicFox",
+      gameSelection: "Street Fighter 6",
+    });
+    expect(typeof res.body.userId).toBe("string");
+    expect(typeof res.body.registeredAt).toBe("string");
+  });
+
+  it("returns 409 on duplicate registration for the same user and tournament", async () => {
+    const app = createApp();
+    const { tid } = await createTournamentAsOrg(app);
+    const { token } = await register(app, "player", "p1");
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "MKLeo", gameSelection: "Street Fighter 6" });
+
+    const dup = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "MKLeo", gameSelection: "Street Fighter 6" });
+
+    expect(dup.status).toBe(409);
+  });
+
+  it("returns 400 when required fields (displayName, gameSelection) are missing", async () => {
+    const app = createApp();
+    const { tid } = await createTournamentAsOrg(app);
+    const { token } = await register(app, "player", "p1");
+
+    // No body at all
+    const r1 = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    expect(r1.status).toBe(400);
+
+    // Missing gameSelection
+    const r2 = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "Test" });
+    expect(r2.status).toBe(400);
+
+    // Missing displayName
+    const r3 = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ gameSelection: "Tekken 8" });
+    expect(r3.status).toBe(400);
+  });
+
+  it("increments registered player count after each registration", async () => {
+    const app = createApp();
+    const { tid } = await createTournamentAsOrg(app);
+    const { token: t1 } = await register(app, "player", "p1");
+    const { token: t2 } = await register(app, "player", "p2");
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t1}`)
+      .send({ displayName: "Player1", gameSelection: "SF6" });
+
+    let detail = await request(app).get(`/api/tournaments/${tid}`);
+    expect(detail.body.entrantCount).toBe(1);
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t2}`)
+      .send({ displayName: "Player2", gameSelection: "SF6" });
+
+    detail = await request(app).get(`/api/tournaments/${tid}`);
+    expect(detail.body.entrantCount).toBe(2);
+  });
+
+  it("returns 401 without auth token", async () => {
+    const app = createApp();
+    const { tid } = await createTournamentAsOrg(app);
+
+    const res = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .send({ displayName: "Anon", gameSelection: "SF6" });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 for a non-existent tournament", async () => {
+    const app = createApp();
+    const { token } = await register(app, "player", "p1");
+
+    const res = await request(app)
+      .post("/api/tournaments/does-not-exist/register")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "X", gameSelection: "Y" });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 403 when registration is closed", async () => {
+    const app = createApp();
+    const { orgToken, tid } = await createTournamentAsOrg(app);
+    const { token } = await register(app, "player", "p1");
+
+    // Organizer closes registration
+    await request(app)
+      .patch(`/api/tournaments/${tid}`)
+      .set("Authorization", `Bearer ${orgToken}`)
+      .send({ registrationOpen: false });
+
+    const res = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ displayName: "Late", gameSelection: "SF6" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("closed");
+  });
+
+  it("returns 403 when tournament is full", async () => {
+    const app = createApp();
+    const { tid } = await createTournamentAsOrg(app, { maxEntrants: 2 });
+    const { token: t1 } = await register(app, "player", "p1");
+    const { token: t2 } = await register(app, "player", "p2");
+    const { token: t3 } = await register(app, "player", "p3");
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t1}`)
+      .send({ displayName: "P1", gameSelection: "SF6" });
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t2}`)
+      .send({ displayName: "P2", gameSelection: "SF6" });
+
+    const res = await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t3}`)
+      .send({ displayName: "P3", gameSelection: "SF6" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("full");
+  });
+});
+
+/* ================================================================== */
+/*  Entrant List – GET /api/tournaments/:id/entrants                  */
+/* ================================================================== */
+describe("GET /api/tournaments/:id/entrants", () => {
+  it("returns an accurate, ordered list of all registered players", async () => {
+    const app = createApp();
+    const { token: orgToken } = await register(app, "organizer", "org");
+    const tRes = await request(app)
+      .post("/api/tournaments")
+      .set("Authorization", `Bearer ${orgToken}`)
+      .send({ name: "Locals", game: "GGST" });
+    const tid = tRes.body.id as string;
+
+    const { token: t1 } = await register(app, "player", "p1");
+    const { token: t2 } = await register(app, "player", "p2");
+    const { token: t3 } = await register(app, "player", "p3");
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t1}`)
+      .send({ displayName: "Alice", gameSelection: "GGST" });
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t2}`)
+      .send({ displayName: "Bob", gameSelection: "GGST" });
+    await request(app)
+      .post(`/api/tournaments/${tid}/register`)
+      .set("Authorization", `Bearer ${t3}`)
+      .send({ displayName: "Carol", gameSelection: "GGST" });
+
+    const res = await request(app).get(`/api/tournaments/${tid}/entrants`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.tournamentId).toBe(tid);
+    expect(res.body.count).toBe(3);
+    expect(res.body.entrants).toHaveLength(3);
+    // Verify order is by registration time
+    const times = res.body.entrants.map((e: { registeredAt: string }) =>
+      new Date(e.registeredAt).getTime()
+    );
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
+    }
+    // Verify names match
+    expect(res.body.entrants.map((e: { displayName: string }) => e.displayName)).toEqual([
+      "Alice",
+      "Bob",
+      "Carol",
+    ]);
+  });
+
+  it("returns 404 for a non-existent tournament", async () => {
+    const app = createApp();
+    const res = await request(app).get("/api/tournaments/fake-id/entrants");
+    expect(res.status).toBe(404);
   });
 });

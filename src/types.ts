@@ -13,12 +13,15 @@ export interface Tournament {
   name: string;
   game: string;
   organizerId: string;
+  maxEntrants: number | null;
+  registrationOpen: boolean;
   createdAt: string;
 }
 
 export interface Entrant {
   userId: string;
   displayName: string;
+  gameSelection: string;
   registeredAt: string;
 }
 

@@ -39,6 +39,8 @@ export function createTournament(input: {
   name: string;
   game: string;
   organizerId: string;
+  maxEntrants?: number | null;
+  registrationOpen?: boolean;
 }): Tournament {
   const id = randomUUID();
   const tournament: Tournament = {
@@ -46,11 +48,24 @@ export function createTournament(input: {
     name: input.name,
     game: input.game,
     organizerId: input.organizerId,
+    maxEntrants: input.maxEntrants ?? null,
+    registrationOpen: input.registrationOpen ?? true,
     createdAt: new Date().toISOString(),
   };
   tournaments.set(id, tournament);
   entrantsByTournament.set(id, []);
   return tournament;
+}
+
+export function updateTournament(
+  id: string,
+  updates: Partial<Pick<Tournament, "registrationOpen" | "maxEntrants">>
+): Tournament | undefined {
+  const t = tournaments.get(id);
+  if (!t) return undefined;
+  if (updates.registrationOpen !== undefined) t.registrationOpen = updates.registrationOpen;
+  if (updates.maxEntrants !== undefined) t.maxEntrants = updates.maxEntrants;
+  return t;
 }
 
 export function getTournament(id: string): Tournament | undefined {

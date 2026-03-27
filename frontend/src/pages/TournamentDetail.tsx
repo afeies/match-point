@@ -13,6 +13,11 @@ export function TournamentDetailPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /* Registration form state */
+  const [showForm, setShowForm] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [gameSelection, setGameSelection] = useState("");
+
   const load = useCallback(async () => {
     if (!id) return;
     const d = await api.getTournament(id);
@@ -35,17 +40,25 @@ export function TournamentDetailPage() {
     };
   }, [load]);
 
-  async function onRegister() {
+  /* Pre-fill form defaults when user/detail load */
+  useEffect(() => {
+    if (user && !displayName) setDisplayName(user.displayName);
+    if (detail && !gameSelection) setGameSelection(detail.game);
+  }, [user, detail, displayName, gameSelection]);
+
+  async function onRegister(e: React.FormEvent) {
+    e.preventDefault();
     if (!id || !user) return;
     setErr(null);
     setMsg(null);
     setBusy(true);
     try {
-      await api.registerForTournament(id);
-      setMsg("You are registered for this event.");
+      await api.registerForTournament(id, { displayName, gameSelection });
+      setMsg("You are registered for this event!");
+      setShowForm(false);
       await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Registration failed");
+    } catch (err) {
+      setErr(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setBusy(false);
     }
@@ -72,23 +85,62 @@ export function TournamentDetailPage() {
   if (!detail) return <p className="muted">Loading…</p>;
 
   const already = user && detail.entrants.some((e) => e.userId === user.id);
-  const canRegister = ready && user?.role === "player" && !already;
+  const isFull =
+    detail.maxEntrants !== null && detail.entrantCount >= detail.maxEntrants;
+  const isClosed = !detail.registrationOpen;
+  const canRegister =
+    ready && user?.role === "player" && !already && !isFull && !isClosed;
   const isOrg = user?.role === "organizer";
+
+  const spotsLabel =
+    detail.maxEntrants !== null
+      ? `${detail.entrantCount} / ${detail.maxEntrants} spots filled`
+      : `${detail.entrantCount} entr${detail.entrantCount === 1 ? "ant" : "ants"}`;
 
   return (
     <div>
       <p style={{ marginBottom: "1rem" }}>
         <Link to="/tournament">← Tournament</Link>
       </p>
-      <h1 style={{ fontSize: "1.75rem", margin: "0 0 0.35rem" }}>{detail.name}</h1>
+      <h1 style={{ fontSize: "1.75rem", margin: "0 0 0.35rem" }}>
+        {detail.name}
+      </h1>
       <p className="muted" style={{ marginTop: 0 }}>
-        {detail.game} · {detail.entrantCount} entr{detail.entrantCount === 1 ? "ant" : "ants"}
+        {detail.game} · {spotsLabel}
       </p>
 
-      {msg && <div className="success-banner">{msg}</div>}
-      {err && <div className="error-banner">{err}</div>}
+      {msg && (
+        <div className="success-banner" role="status" aria-live="polite">
+          {msg}
+        </div>
+      )}
+      {err && (
+        <div className="error-banner" role="alert" aria-live="assertive">
+          {err}
+        </div>
+      )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", margin: "1.25rem 0", alignItems: "center" }}>
+      {/* Registration closed / full banners */}
+      {isClosed && (
+        <div className="error-banner" role="status">
+          Registration is closed for this tournament.
+        </div>
+      )}
+      {!isClosed && isFull && (
+        <div className="error-banner" role="status">
+          Registration is full. No more spots are available.
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.5rem",
+          margin: "1.25rem 0",
+          alignItems: "center",
+        }}
+      >
         {hasPublishedBracket && (
           <Link
             to={`/t/${id}/bracket`}
@@ -98,25 +150,90 @@ export function TournamentDetailPage() {
             View bracket
           </Link>
         )}
-        {canRegister && (
-          <button type="button" className="btn btn-primary" onClick={onRegister} disabled={busy}>
+        {canRegister && !showForm && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setShowForm(true)}
+          >
             Sign up for this event
           </button>
         )}
         {ready && user?.role === "player" && already && (
-          <span className="muted">You are registered.</span>
+          <span className="muted">✓ You are registered.</span>
         )}
         {ready && !user && (
           <span className="muted">
-            <Link to={`/login?next=${encodeURIComponent(`/t/${id ?? ""}`)}`}>Log in</Link> as a player to sign up.
+            <Link
+              to={`/login?next=${encodeURIComponent(`/t/${id ?? ""}`)}`}
+            >
+              Log in
+            </Link>{" "}
+            as a player to sign up.
           </span>
         )}
         {isOrg && (
-          <button type="button" className="btn btn-ghost" onClick={onBracket} disabled={busy}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={onBracket}
+            disabled={busy}
+          >
             Generate bracket
           </button>
         )}
       </div>
+
+      {/* Registration form */}
+      {showForm && canRegister && (
+        <div className="card" style={{ marginBottom: "1.25rem" }}>
+          <h2 style={{ fontSize: "1.1rem", marginTop: 0, marginBottom: "0.75rem" }}>
+            Register for {detail.name}
+          </h2>
+          <form onSubmit={onRegister}>
+            <div className="field">
+              <label htmlFor="reg-displayName">Display Name</label>
+              <input
+                id="reg-displayName"
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                required
+                maxLength={120}
+                aria-required="true"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="reg-gameSelection">Game</label>
+              <input
+                id="reg-gameSelection"
+                type="text"
+                value={gameSelection}
+                onChange={(e) => setGameSelection(e.target.value)}
+                required
+                aria-required="true"
+              />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy}
+              >
+                {busy ? "Registering…" : "Confirm Registration"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setShowForm(false)}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       <h2 style={{ fontSize: "1.1rem", marginBottom: "0.65rem" }}>Entrants</h2>
       {detail.entrants.length === 0 ? (

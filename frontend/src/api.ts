@@ -12,11 +12,13 @@ export interface TournamentSummary {
   name: string;
   game: string;
   entrantCount: number;
+  maxEntrants: number | null;
+  registrationOpen: boolean;
   createdAt: string;
 }
 
 export interface TournamentDetail extends TournamentSummary {
-  entrants: { userId: string; displayName: string; registeredAt: string }[];
+  entrants: { userId: string; displayName: string; gameSelection: string; registeredAt: string }[];
 }
 
 export interface BracketPlayer {
@@ -133,12 +135,31 @@ export const api = {
     });
   },
 
-  registerForTournament(tournamentId: string): Promise<unknown> {
+  registerForTournament(
+    tournamentId: string,
+    body: { displayName: string; gameSelection: string }
+  ): Promise<{
+    tournamentId: string;
+    userId: string;
+    displayName: string;
+    gameSelection: string;
+    registeredAt: string;
+  }> {
     return request(`/api/tournaments/${tournamentId}/register`, {
       method: "POST",
-      body: "{}",
+      body: JSON.stringify(body),
       headers: jsonHeaders,
     });
+  },
+
+  getEntrants(
+    tournamentId: string
+  ): Promise<{
+    tournamentId: string;
+    count: number;
+    entrants: { userId: string; displayName: string; gameSelection: string; registeredAt: string }[];
+  }> {
+    return request(`/api/tournaments/${tournamentId}/entrants`, { auth: false });
   },
 
   generateBracket(tournamentId: string): Promise<BracketResponse> {
