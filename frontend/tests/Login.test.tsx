@@ -1,8 +1,9 @@
 /**
  * Tests for frontend/src/pages/Login.tsx
  *
- * Covers: safeNext (via navigation assertions), Login form rendering,
- * onSubmit (success + error), loading state, redirect when already logged in.
+ * Covers: safeNext, form + Register link (next encoding), submit + navigate,
+ * sanitizing malicious next on login, loading/disabled states, redirect when
+ * already authenticated (with optional next).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
@@ -96,6 +97,16 @@ describe("Login – rendering", () => {
     expect(screen.getByRole("link", { name: /register/i })).toBeInTheDocument();
   });
 
+  it("points Register at /register with next=/dashboard when no next query is present", () => {
+    renderLogin("/login");
+    expect(screen.getByRole("link", { name: /register/i })).toHaveAttribute("href", "/register?next=%2Fdashboard");
+  });
+
+  it("encodes the Register next param to match the login next param", () => {
+    renderLogin("/login?next=%2Ft%2Fabc");
+    expect(screen.getByRole("link", { name: /register/i })).toHaveAttribute("href", "/register?next=%2Ft%2Fabc");
+  });
+
   it("shows a loading placeholder while auth is not ready", () => {
     vi.mocked(useAuth).mockReturnValue(buildAuthState({ ready: false }) as ReturnType<typeof useAuth>);
     render(
@@ -143,6 +154,17 @@ describe("Login – onSubmit", () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/profile", { replace: true }));
   });
 
+  it("navigates to /dashboard after login when next is an open-redirect attempt", async () => {
+    mockLogin.mockResolvedValue(undefined);
+    renderLogin("/login?next=//evil.com");
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "a@b.com" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "pass" } });
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/dashboard", { replace: true }));
+  });
+
   it("displays an error banner when login fails", async () => {
     mockLogin.mockRejectedValue(new Error("Invalid credentials"));
     renderLogin();
@@ -185,5 +207,37 @@ describe("Login – redirect when already authenticated", () => {
     );
 
     expect(mockNavigate).toHaveBeenCalledWith("/dashboard", { replace: true });
+  });
+
+  it("redirects to the next param when already logged in", () => {
+    const mockUser = { id: "1", email: "a@b.com", displayName: "Alice", role: "player" as const };
+    vi.mocked(useAuth).mockReturnValue(buildAuthState({ user: mockUser, ready: true }) as ReturnType<typeof useAuth>);
+
+    render(
+      <MemoryRouter initialEntries={["/login?next=/profile"]}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={<div>dashboard</div>} />
+          <Route path="/profile" element={<div>profile</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith("/profile", { replace: true });
+  });
+
+  it("does not render the login form when already authenticated", () => {
+    const mockUser = { id: "1", email: "a@b.com", displayName: "Alice", role: "player" as const };
+    vi.mocked(useAuth).mockReturnValue(buildAuthState({ user: mockUser, ready: true }) as ReturnType<typeof useAuth>);
+
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("heading", { name: /^log in$/i })).not.toBeInTheDocument();
   });
 });
