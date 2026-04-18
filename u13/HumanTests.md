@@ -31,7 +31,7 @@ Each tournament entry should clearly display:
 - Tournament name (clickable link to the tournament detail page)
 - Game name
 - Date (formatted like "Apr 18, 2026")
-- Placement in the format "X / Y" (e.g., "3rd / 16" meaning 3rd out of 16 entrants)
+- Placement (e.g., "1st", "2nd", "3rd", "4th")
 - Win-loss record (e.g., "2-1")
 
 Click one of the tournament name links. Confirm it navigates to the correct tournament detail page (`/t/:id`). Return to the profile.
