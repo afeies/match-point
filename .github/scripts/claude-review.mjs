@@ -84,7 +84,9 @@ const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 try {
   const resp = await client.messages.create({
-    model: "claude-opus-4-7",
+    // Haiku is ~10x cheaper than Opus and produces solid structured reviews.
+    // Override by setting the CLAUDE_REVIEW_MODEL env var in the workflow.
+    model: process.env.CLAUDE_REVIEW_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 2000,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],

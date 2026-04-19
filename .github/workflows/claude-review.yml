@@ -71,11 +71,19 @@ jobs:
             core.setOutput('title', pr.title);
             core.setOutput('body', pr.body || '');
 
-      - name: Checkout PR head
+      - name: Checkout base + PR refs
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.pr.outputs.head_sha }}
+          # We check out the default branch and then fetch both the base and
+          # the PR head as refs — this works even for merged PRs whose head
+          # branches have been deleted (GitHub keeps refs/pull/N/head around).
           fetch-depth: 0
+
+      - name: Fetch PR head ref
+        run: |
+          set -euo pipefail
+          git fetch origin "pull/${{ steps.pr.outputs.number }}/head:pr-head"
+          git fetch origin "${{ steps.pr.outputs.base_sha }}" --depth=1 || true
 
       - name: Collect diff and file list
         id: diff
@@ -84,7 +92,6 @@ jobs:
           mkdir -p .claude-review
           BASE="${{ steps.pr.outputs.base_sha }}"
           HEAD="${{ steps.pr.outputs.head_sha }}"
-          git fetch origin "$BASE" --depth=1 || true
           # Cap the diff at ~200KB so we stay within model input budget.
           git diff --no-color "$BASE"..."$HEAD" | head -c 200000 > .claude-review/diff.patch
           git diff --name-status "$BASE"..."$HEAD" > .claude-review/files.txt
