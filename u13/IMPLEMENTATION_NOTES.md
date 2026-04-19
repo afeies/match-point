@@ -34,6 +34,15 @@ US13 (Player Match History) has been fully implemented with all machine acceptan
 - [x] Verified all 7 test steps align with implementation
 - [x] Corrected placement display format in test docs
 
+### ✅ LLM-Assisted Code Review (Complete)
+- [x] Created GitHub Action workflow for automated AI code review
+- [x] Configured structured review prompt with 5 focus areas
+- [x] Set up PR template with AI review checklist
+- [x] Created comprehensive documentation (QUICK-SETUP, LLM-REVIEW-GUIDE)
+- [x] Integrated with existing CI/CD workflow
+- [x] Documented human vs. AI review responsibilities
+- [x] Created U13-specific integration documentation
+
 ## Test Results
 - Backend tests: **52/52 passing** (8 new US13 tests + 44 existing)
 - Frontend tests: **268/268 passing** (15 PlayerProfilePage tests updated)
@@ -67,6 +76,92 @@ Create a `seeds/us13-demo.ts` script that:
 2. Registers 4+ players per tournament
 3. Sets realistic match results
 4. Finalizes all tournaments
+
+## LLM-Assisted Code Review System
+
+As part of U13, we implemented a comprehensive automated code review system that provides LLM-powered feedback on all pull requests.
+
+### Components Created
+
+1. **GitHub Action Workflow** ([.github/workflows/llm-code-review.yml](../.github/workflows/llm-code-review.yml))
+   - Triggers on PR open, update, reopen
+   - Extracts diff and sends to OpenAI GPT-4o-mini
+   - Posts structured review as bot comment
+   - Auto-updates when PR changes
+
+2. **PR Template** ([.github/pull_request_template.md](../.github/pull_request_template.md))
+   - Includes AI review checklist for authors
+   - Guidance for human reviewers
+   - Integration with existing workflow
+
+3. **Documentation Suite**
+   - [.github/QUICK-SETUP.md](../.github/QUICK-SETUP.md) - 5-minute setup guide
+   - [.github/LLM-REVIEW-GUIDE.md](../.github/LLM-REVIEW-GUIDE.md) - Comprehensive usage guide
+   - [.github/LLM-REVIEW-PROMPT.md](../.github/LLM-REVIEW-PROMPT.md) - Prompt template docs
+   - [.github/README.md](../.github/README.md) - Workflows overview
+
+4. **U13 Integration Docs**
+   - [u13/LLM-REVIEW-INTEGRATION.md](LLM-REVIEW-INTEGRATION.md) - Implementation details
+   - [u13/CI-SETUP.md](CI-SETUP.md) - Updated with LLM review info
+
+### Requirements Met
+
+✅ **Repeatability**
+- Workflow is version-controlled and auditable
+- Anyone can see how review is triggered (.github/workflows/llm-code-review.yml)
+- Output appears consistently on PRs (bot comments)
+- Logs available in GitHub Actions tab
+
+✅ **Visible Output**
+- Bot comments on PRs with structured feedback
+- Actions tab shows workflow runs and logs
+- PR checks section shows LLM review status
+
+✅ **Human Judgment**
+- AI review is **advisory only** - never auto-approves
+- PR template explicitly requires human review
+- Documentation clearly separates AI vs. human responsibilities
+- Humans make final merge decisions
+
+### How to Use
+
+**For Authors**:
+1. Open PR → wait ~60 seconds for AI review
+2. Read bot comment feedback
+3. Address concerns in "⚠️ Concerns & Suggestions"
+4. Request human review when ready
+
+**For Reviewers**:
+1. Read AI review for orientation
+2. Verify AI-flagged issues
+3. Focus on business logic and design
+4. Approve/reject based on human judgment
+
+### Demonstration
+
+To see the LLM review in action:
+
+1. **Setup** (one-time):
+   - Add `OPENAI_API_KEY` to GitHub Secrets
+   - See [.github/QUICK-SETUP.md](../.github/QUICK-SETUP.md)
+
+2. **Test**:
+   - Open any PR to `main`
+   - AI review comment appears within 60 seconds
+   - Check Actions tab for workflow logs
+
+3. **Verify**:
+   - Review output in PR comments
+   - Inspect workflow logs
+   - Confirm repeatability
+
+### Cost
+- Model: GPT-4o-mini
+- ~$0.001 per review
+- ~$0.10 for full semester (100 PRs)
+- Negligible for educational use
+
+See [.github/QUICK-SETUP.md](../.github/QUICK-SETUP.md#cost-estimates) for details.
 
 ## Known Limitations
 - No UI for organizers to finalize tournaments (future enhancement)
