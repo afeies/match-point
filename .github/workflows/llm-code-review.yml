@@ -152,6 +152,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
       
       - name: Post review comment
+        if: github.event.pull_request.head.repo.fork == false
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -188,9 +189,28 @@ jobs:
               });
             }
       
+      - name: Fork PR notice
+        if: github.event.pull_request.head.repo.fork == true
+        run: |
+          echo "### 🤖 AI Review (Fork PR)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ This PR is from a fork. GitHub token cannot post comments for security reasons." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Review output:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat review.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Fork PR authors: copy the review above to use in your PR description or discussion." >> $GITHUB_STEP_SUMMARY
+      
       - name: Summary
         run: |
           echo "### 🤖 LLM Code Review Completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Review posted as PR comment" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            echo "✅ Review generated (see above for output)" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Cannot post comment (fork PR - security restriction)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Review posted as PR comment" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "PR: #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
