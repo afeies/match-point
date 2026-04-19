@@ -1,0 +1,197 @@
+name: LLM Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  llm-review:
+    name: AI-Assisted Code Review
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for accurate diffs
+      
+      - name: Get PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get the diff for this PR
+          gh pr diff ${{ github.event.pull_request.number }} > pr_diff.txt
+          
+          # Check diff size (limit to ~10KB to avoid token limits)
+          DIFF_SIZE=$(wc -c < pr_diff.txt)
+          if [ $DIFF_SIZE -gt 10240 ]; then
+            echo "⚠️ Diff is large ($DIFF_SIZE bytes). Review will be truncated." >> $GITHUB_STEP_SUMMARY
+            head -c 10240 pr_diff.txt > pr_diff_truncated.txt
+            mv pr_diff_truncated.txt pr_diff.txt
+          fi
+          
+          echo "Diff size: $DIFF_SIZE bytes" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Load review prompt template
+        id: template
+        run: |
+          cat > review_prompt.txt << 'EOF'
+          You are an expert code reviewer for a TypeScript tournament management application called MatchPoint. 
+          
+          Review the following pull request diff and provide constructive feedback focusing on:
+          
+          1. **Code Quality & Patterns**
+             - Does the code follow TypeScript best practices?
+             - Are there any obvious bugs or edge cases not handled?
+             - Is error handling appropriate?
+             - Are types and interfaces properly defined?
+          
+          2. **Testing**
+             - Are there adequate tests for new functionality?
+             - Do tests cover edge cases and error scenarios?
+             - Are test descriptions clear and meaningful?
+          
+          3. **Security**
+             - Are there any potential security vulnerabilities?
+             - Is input validation present where needed?
+             - Are authentication/authorization checks appropriate?
+          
+          4. **Maintainability**
+             - Is the code readable and well-structured?
+             - Are variable/function names descriptive?
+             - Is there unnecessary complexity that could be simplified?
+             - Does it follow existing project patterns?
+          
+          5. **Documentation**
+             - Are comments present where needed (but not excessive)?
+             - Are API changes documented?
+             - Is the PR description adequate?
+          
+          Format your response as:
+          
+          ## 🤖 AI Code Review Summary
+          
+          **Overall Assessment**: [Brief 1-2 sentence summary]
+          
+          ### ✅ Strengths
+          - [List positive aspects]
+          
+          ### ⚠️ Concerns & Suggestions
+          - [List issues or improvements, if any]
+          
+          ### 🔍 Questions for Human Reviewers
+          - [Things that require human judgment]
+          
+          ---
+          *This review is AI-generated and should complement, not replace, human code review.*
+          
+          PR TITLE: ${{ github.event.pull_request.title }}
+          
+          PR DESCRIPTION:
+          ${{ github.event.pull_request.body }}
+          
+          DIFF:
+          EOF
+          
+          cat pr_diff.txt >> review_prompt.txt
+      
+      - name: Call OpenAI API
+        id: llm
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "❌ OPENAI_API_KEY secret not configured" >> $GITHUB_STEP_SUMMARY
+            echo "review=## ⚠️ AI Review Unavailable\n\nOpenAI API key not configured. Please add OPENAI_API_KEY to repository secrets." > review.txt
+            exit 0
+          fi
+          
+          # Call OpenAI API
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d @- << EOF
+          {
+            "model": "gpt-4o-mini",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are an expert code reviewer specializing in TypeScript, Node.js, React, and web application security."
+              },
+              {
+                "role": "user",
+                "content": $(cat review_prompt.txt | jq -Rs .)
+              }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2000
+          }
+          EOF
+          )
+          
+          # Extract the review content
+          echo "$RESPONSE" | jq -r '.choices[0].message.content // "Error: Unable to get review from OpenAI"' > review.txt
+          
+          # Check for API errors
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null; then
+            ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message')
+            echo "## ⚠️ AI Review Error\n\n$ERROR_MSG" > review.txt
+            echo "❌ OpenAI API error: $ERROR_MSG" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ AI review completed successfully" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Save review for next step (handle multiline)
+          echo "review<<EOF" >> $GITHUB_OUTPUT
+          cat review.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Post review comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const review = `${{ steps.llm.outputs.review }}`;
+            
+            // Check if there's already an AI review comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🤖 AI Code Review')
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: review
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: review
+              });
+            }
+      
+      - name: Summary
+        run: |
+          echo "### 🤖 LLM Code Review Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review posted as PR comment" >> $GITHUB_STEP_SUMMARY
+          echo "PR: #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
