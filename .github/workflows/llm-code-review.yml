@@ -22,11 +22,10 @@ jobs:
       
       - name: Get PR diff
         id: diff
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the diff for this PR
-          gh pr diff ${{ github.event.pull_request.number }} > pr_diff.txt
+          # Get the diff using git
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git diff origin/${{ github.event.pull_request.base.ref }}...HEAD > pr_diff.txt
           
           # Check diff size (limit to ~10KB to avoid token limits)
           DIFF_SIZE=$(wc -c < pr_diff.txt)
