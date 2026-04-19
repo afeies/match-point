@@ -9,8 +9,17 @@ Automated tests run on **pull requests** and on **pushes** to `main`, `master`, 
 | Workflow | What it runs |
 |----------|----------------|
 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | `npx tsc --noEmit`, `npm test` (API / Vitest), `frontend`: `npm test`, `npm run build` |
+| [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml) | LLM-assisted code review — calls the Anthropic API with a structured prompt and posts the result as a PR comment |
 
 The API test suite includes **US12 (match-call notifications)** in `src/notifications.test.ts` (Vitest + Supertest against the real Express app).
+
+## Automated code review
+
+Every PR also gets an **automated Claude review** posted as a PR comment (see
+[`.github/scripts/README.md`](.github/scripts/README.md) for details on how it's
+triggered, where the output lives, and how to re-run it on a merged PR). The
+review is **advisory** — a human reviewer still approves merges per the PR
+template.
 
 ## Local checks (same gates as CI)
 
