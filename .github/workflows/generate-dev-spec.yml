@@ -1,0 +1,148 @@
+name: Generate Dev Spec
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      story_number:
+        description: "User story number (e.g. 11, 12, 13)"
+        required: true
+        type: string
+      pr_number:
+        description: "PR number that implemented this story"
+        required: true
+        type: string
+
+jobs:
+  generate-dev-spec:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.review.state == 'approved')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          fetch-depth: 0
+
+      - name: Detect user story number from PR
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "story_number=${{ inputs.story_number }}" >> "$GITHUB_OUTPUT"
+            echo "pr_number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          else
+            PR_NUMBER=${{ github.event.pull_request.number }}
+            echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+            PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title')
+            PR_BODY=$(gh pr view "$PR_NUMBER" --json body -q '.body')
+            COMBINED="${PR_TITLE} ${PR_BODY}"
+            STORY_NUM=$(echo "$COMBINED" | grep -oP 'US\K[0-9]+' | head -1)
+            if [ -z "$STORY_NUM" ]; then
+              echo "No user story number found in PR #${PR_NUMBER}. Skipping."
+              echo "story_number=" >> "$GITHUB_OUTPUT"
+            else
+              echo "story_number=${STORY_NUM}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Skip if no story detected
+        if: steps.detect.outputs.story_number == ''
+        run: |
+          echo "No user story number detected. Exiting."
+          exit 0
+
+      - name: Gather code context
+        id: context
+        run: |
+          STORY="u${{ steps.detect.outputs.story_number }}"
+          echo "story_dir=${STORY}" >> "$GITHUB_OUTPUT"
+          if [ -f "${STORY}/dev-spec.md" ]; then
+            echo "mode=update" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=generate" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Call Claude API to generate dev spec
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          STORY_NUM="${{ steps.detect.outputs.story_number }}"
+          STORY_DIR="${{ steps.context.outputs.story_dir }}"
+          MODE="${{ steps.context.outputs.mode }}"
+
+          SYSTEM_PROMPT=$(cat ".github/prompts/${MODE}-dev-spec.md")
+
+          # Gather source context
+          CONTEXT=""
+          CONTEXT="${CONTEXT}\n=== src/types.ts ===\n$(cat src/types.ts 2>/dev/null)"
+          CONTEXT="${CONTEXT}\n=== src/store.ts (first 150 lines) ===\n$(head -150 src/store.ts 2>/dev/null)"
+          for f in src/routes/*.ts; do
+            CONTEXT="${CONTEXT}\n=== $f ===\n$(cat "$f" 2>/dev/null)"
+          done
+          CONTEXT="${CONTEXT}\n=== frontend/src/api.ts ===\n$(cat frontend/src/api.ts 2>/dev/null)"
+
+          if [ -f "${STORY_DIR}/dev-spec.md" ]; then
+            EXISTING=$(cat "${STORY_DIR}/dev-spec.md")
+            USER_MSG="Update the dev spec for US${STORY_NUM}.\n\nEXISTING DEV SPEC:\n${EXISTING}\n\nCURRENT CODEBASE:\n${CONTEXT}\n\nGenerate the updated dev-spec.md content. Output ONLY the markdown content."
+          else
+            USER_MSG="Generate a dev spec for US${STORY_NUM}.\n\nCURRENT CODEBASE:\n${CONTEXT}\n\nGenerate the dev-spec.md content. Output ONLY the markdown content."
+          fi
+
+          RESPONSE=$(curl -s -X POST https://api.anthropic.com/v1/messages \
+            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(jq -n \
+              --arg system "$SYSTEM_PROMPT" \
+              --arg user "$USER_MSG" \
+              '{
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 4096,
+                system: $system,
+                messages: [{role: "user", content: $user}]
+              }')")
+
+          DEV_SPEC=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+
+          if [ -z "$DEV_SPEC" ]; then
+            echo "ERROR: Claude API returned no content"
+            echo "$RESPONSE" | jq .
+            exit 1
+          fi
+
+          mkdir -p "$STORY_DIR"
+          echo "$DEV_SPEC" > "${STORY_DIR}/dev-spec.md"
+          echo "Generated dev spec for US${STORY_NUM} (${MODE} mode)"
+
+      - name: Create branch, commit, and push
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          STORY_NUM="${{ steps.detect.outputs.story_number }}"
+          PR_NUM="${{ steps.detect.outputs.pr_number }}"
+          STORY_DIR="${{ steps.context.outputs.story_dir }}"
+          MODE="${{ steps.context.outputs.mode }}"
+          BRANCH="dev-spec-us${STORY_NUM}-pr${PR_NUM}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add "${STORY_DIR}/dev-spec.md"
+
+          COMMIT_MSG="docs: ${MODE} dev spec for US${STORY_NUM} after PR #${PR_NUM}"
+          git commit -m "$COMMIT_MSG" || echo "No changes to commit"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "docs: ${MODE} dev spec for US${STORY_NUM}" \
+            --body "Automated dev spec generated by GitHub Action after PR #${PR_NUM} was approved. Please review for accuracy before merging." \
+            --base main \
+            --head "$BRANCH"
