@@ -1,0 +1,418 @@
+name: Generate Dev Spec
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  generate-dev-spec:
+    name: Generate/Update Development Specification
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for accurate diffs
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Extract User Story Number
+        id: extract_story
+        run: |
+          # Try to extract US number from PR title (e.g., "US13: Feature" or "[US13]" or "Implement US13")
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          # Try multiple patterns
+          US_NUM=$(echo "$PR_TITLE" | grep -oE 'US[0-9]+|U[0-9]+|us[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' | sed 's/U/US/')
+          
+          if [ -z "$US_NUM" ]; then
+            # Try to extract from PR labels
+            LABELS='${{ toJSON(github.event.pull_request.labels.*.name) }}'
+            US_NUM=$(echo "$LABELS" | grep -oE 'US[0-9]+|US-[0-9]+' | head -1 | sed 's/-//')
+          fi
+          
+          if [ -z "$US_NUM" ]; then
+            # Try to extract from branch name
+            BRANCH="${{ github.event.pull_request.head.ref }}"
+            US_NUM=$(echo "$BRANCH" | grep -oE 'u[0-9]+|us[0-9]+|US[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]' | sed 's/^U/US/')
+          fi
+          
+          if [ -z "$US_NUM" ]; then
+            echo "❌ Could not detect user story number from PR title, labels, or branch name" >> $GITHUB_STEP_SUMMARY
+            echo "Skipping dev spec generation" >> $GITHUB_STEP_SUMMARY
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "✅ Detected user story: $US_NUM" >> $GITHUB_STEP_SUMMARY
+          echo "us_number=$US_NUM" >> $GITHUB_OUTPUT
+          echo "skip=false" >> $GITHUB_OUTPUT
+          
+          # Extract numeric part for folder name (US13 -> u13)
+          US_FOLDER=$(echo "$US_NUM" | sed 's/US/u/')
+          echo "us_folder=$US_FOLDER" >> $GITHUB_OUTPUT
+      
+      - name: Check if Dev Spec Exists
+        id: check_spec
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          US_FOLDER="${{ steps.extract_story.outputs.us_folder }}"
+          
+          # Check for dev-spec.md or DEVSPEC.md
+          if [ -f "$US_FOLDER/dev-spec.md" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "spec_file=$US_FOLDER/dev-spec.md" >> $GITHUB_OUTPUT
+            echo "📝 Found existing dev spec: $US_FOLDER/dev-spec.md" >> $GITHUB_STEP_SUMMARY
+          elif [ -f "$US_FOLDER/DEVSPEC.md" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "spec_file=$US_FOLDER/DEVSPEC.md" >> $GITHUB_OUTPUT
+            echo "📝 Found existing dev spec: $US_FOLDER/DEVSPEC.md" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "spec_file=$US_FOLDER/dev-spec.md" >> $GITHUB_OUTPUT
+            echo "✨ No existing dev spec — will generate new one" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Get PR Diff
+        id: diff
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          # Get the diff from base to head
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git diff origin/${{ github.event.pull_request.base.ref }}...${{ github.event.pull_request.head.sha }} > pr_diff.txt
+          
+          DIFF_SIZE=$(wc -c < pr_diff.txt)
+          echo "Diff size: $DIFF_SIZE bytes" >> $GITHUB_STEP_SUMMARY
+          
+          # Truncate if too large (keep first 50KB to stay within token limits)
+          if [ $DIFF_SIZE -gt 51200 ]; then
+            echo "⚠️ Diff is large ($DIFF_SIZE bytes). Truncating to 50KB." >> $GITHUB_STEP_SUMMARY
+            head -c 51200 pr_diff.txt > pr_diff_truncated.txt
+            mv pr_diff_truncated.txt pr_diff.txt
+          fi
+      
+      - name: Get Changed Files List
+        id: files
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          git diff --name-only origin/${{ github.event.pull_request.base.ref }}...${{ github.event.pull_request.head.sha }} > changed_files.txt
+          echo "Changed files:" >> $GITHUB_STEP_SUMMARY
+          cat changed_files.txt >> $GITHUB_STEP_SUMMARY
+      
+      - name: Extract User Story Text
+        id: user_story
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          US_NUMBER="${{ steps.extract_story.outputs.us_number }}"
+          
+          # Extract the user story section from user-stories.md
+          if [ -f "user-stories.md" ]; then
+            # Find the section for this user story
+            # This is a simplified extraction - adjust based on actual format
+            awk "/### .*$US_NUMBER[^0-9]|### .*$US_NUMBER:/,/^###[^#]/" user-stories.md > user_story.txt
+            
+            if [ -s user_story.txt ]; then
+              echo "✅ Extracted user story text" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ Could not extract user story text from user-stories.md" >> $GITHUB_STEP_SUMMARY
+              echo "No user story available" > user_story.txt
+            fi
+          else
+            echo "⚠️ user-stories.md not found" >> $GITHUB_STEP_SUMMARY
+            echo "No user story available" > user_story.txt
+          fi
+      
+      - name: Load Existing Dev Spec
+        id: existing_spec
+        if: steps.extract_story.outputs.skip != 'true' && steps.check_spec.outputs.exists == 'true'
+        run: |
+          SPEC_FILE="${{ steps.check_spec.outputs.spec_file }}"
+          cp "$SPEC_FILE" existing_dev_spec.txt
+          echo "📖 Loaded existing dev spec from $SPEC_FILE" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Prepare Prompt for New Dev Spec
+        id: prompt_new
+        if: steps.extract_story.outputs.skip != 'true' && steps.check_spec.outputs.exists == 'false'
+        run: |
+          cat > llm_prompt.txt << 'PROMPT_END'
+          You are generating a development specification for a newly implemented user story.
+          
+          Follow the instructions in the DEV-SPEC-GENERATION-PROMPT.md file.
+          
+          Here are the inputs:
+          
+          USER_STORY_NUMBER: ${{ steps.extract_story.outputs.us_number }}
+          
+          USER_STORY_TEXT:
+          PROMPT_END
+          
+          cat user_story.txt >> llm_prompt.txt
+          
+          cat >> llm_prompt.txt << 'PROMPT_END'
+          
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          
+          PR_DESCRIPTION:
+          ${{ github.event.pull_request.body }}
+          
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          
+          PR_REVIEWERS: ${{ join(github.event.pull_request.requested_reviewers.*.login, ', ') }}
+          
+          MERGE_DATE: ${{ github.event.pull_request.merged_at }}
+          
+          CHANGED_FILES:
+          PROMPT_END
+          
+          cat changed_files.txt >> llm_prompt.txt
+          
+          cat >> llm_prompt.txt << 'PROMPT_END'
+          
+          CODE_DIFF:
+          PROMPT_END
+          
+          cat pr_diff.txt >> llm_prompt.txt
+          
+          echo "" >> llm_prompt.txt
+          echo "Generate a complete, well-structured development specification following the guidelines." >> llm_prompt.txt
+          echo "Output ONLY the Markdown content of the dev spec, no preamble." >> llm_prompt.txt
+      
+      - name: Prepare Prompt for Updating Dev Spec
+        id: prompt_update
+        if: steps.extract_story.outputs.skip != 'true' && steps.check_spec.outputs.exists == 'true'
+        run: |
+          cat > llm_prompt.txt << 'PROMPT_END'
+          You are updating an existing development specification to reflect changes in a new PR.
+          
+          Follow the instructions in the DEV-SPEC-UPDATE-PROMPT.md file.
+          
+          Here are the inputs:
+          
+          USER_STORY_NUMBER: ${{ steps.extract_story.outputs.us_number }}
+          
+          EXISTING_DEV_SPEC:
+          PROMPT_END
+          
+          cat existing_dev_spec.txt >> llm_prompt.txt
+          
+          cat >> llm_prompt.txt << 'PROMPT_END'
+          
+          USER_STORY_TEXT:
+          PROMPT_END
+          
+          cat user_story.txt >> llm_prompt.txt
+          
+          cat >> llm_prompt.txt << 'PROMPT_END'
+          
+          UPDATE_PR_NUMBER: ${{ github.event.pull_request.number }}
+          UPDATE_PR_TITLE: ${{ github.event.pull_request.title }}
+          
+          UPDATE_PR_DESCRIPTION:
+          ${{ github.event.pull_request.body }}
+          
+          UPDATE_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          
+          UPDATE_PR_REVIEWERS: ${{ join(github.event.pull_request.requested_reviewers.*.login, ', ') }}
+          
+          UPDATE_MERGE_DATE: ${{ github.event.pull_request.merged_at }}
+          
+          CHANGED_FILES:
+          PROMPT_END
+          
+          cat changed_files.txt >> llm_prompt.txt
+          
+          cat >> llm_prompt.txt << 'PROMPT_END'
+          
+          CODE_DIFF:
+          PROMPT_END
+          
+          cat pr_diff.txt >> llm_prompt.txt
+          
+          echo "" >> llm_prompt.txt
+          echo "Generate the complete UPDATED dev spec in Markdown format." >> llm_prompt.txt
+          echo "Output ONLY the Markdown content, no preamble." >> llm_prompt.txt
+      
+      - name: Load System Prompt
+        id: system_prompt
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          if [ "${{ steps.check_spec.outputs.exists }}" == "true" ]; then
+            PROMPT_FILE=".github/DEV-SPEC-UPDATE-PROMPT.md"
+          else
+            PROMPT_FILE=".github/DEV-SPEC-GENERATION-PROMPT.md"
+          fi
+          
+          if [ -f "$PROMPT_FILE" ]; then
+            cp "$PROMPT_FILE" system_prompt.txt
+            echo "✅ Loaded system prompt from $PROMPT_FILE" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "You are an expert technical writer generating development specifications." > system_prompt.txt
+            echo "⚠️ Prompt file not found: $PROMPT_FILE (using fallback)" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Call LLM to Generate/Update Dev Spec
+        id: llm
+        if: steps.extract_story.outputs.skip != 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "❌ OPENAI_API_KEY secret not configured" >> $GITHUB_STEP_SUMMARY
+            echo "Please add OPENAI_API_KEY to repository secrets to enable dev spec generation." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          # Call OpenAI API
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d @- << EOF
+          {
+            "model": "gpt-4o",
+            "messages": [
+              {
+                "role": "system",
+                "content": $(cat system_prompt.txt | jq -Rs .)
+              },
+              {
+                "role": "user",
+                "content": $(cat llm_prompt.txt | jq -Rs .)
+              }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 4000
+          }
+          EOF
+          )
+          
+          # Extract the dev spec content
+          echo "$RESPONSE" | jq -r '.choices[0].message.content // ""' > generated_dev_spec.md
+          
+          # Check for API errors
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null; then
+            ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message')
+            echo "❌ OpenAI API error: $ERROR_MSG" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          if [ ! -s generated_dev_spec.md ]; then
+            echo "❌ LLM did not generate any content" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "✅ Dev spec generated successfully" >> $GITHUB_STEP_SUMMARY
+          
+          # Show preview
+          echo "### Generated Dev Spec Preview" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`markdown" >> $GITHUB_STEP_SUMMARY
+          head -n 30 generated_dev_spec.md >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Create Dev Spec Directory
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          US_FOLDER="${{ steps.extract_story.outputs.us_folder }}"
+          mkdir -p "$US_FOLDER"
+      
+      - name: Save Dev Spec
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          SPEC_FILE="${{ steps.check_spec.outputs.spec_file }}"
+          cp generated_dev_spec.md "$SPEC_FILE"
+          echo "💾 Saved dev spec to $SPEC_FILE" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Create or Update GitHub Issue
+        id: issue
+        if: steps.extract_story.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          US_NUMBER="${{ steps.extract_story.outputs.us_number }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          
+          # Check if issue already exists for this US dev spec
+          ISSUE_TITLE="[$US_NUMBER] Generate/Update Development Specification"
+          
+          # Search for existing issue
+          EXISTING_ISSUE=$(gh issue list --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number // empty')
+          
+          if [ -n "$EXISTING_ISSUE" ]; then
+            echo "issue_number=$EXISTING_ISSUE" >> $GITHUB_OUTPUT
+            echo "✅ Found existing issue #$EXISTING_ISSUE" >> $GITHUB_STEP_SUMMARY
+            
+            # Add comment to existing issue
+            gh issue comment "$EXISTING_ISSUE" --body "Dev spec updated based on merged PR #$PR_NUMBER"
+          else
+            # Create new issue
+            ISSUE_BODY="This issue tracks the automated generation/updating of the development specification for $US_NUMBER.
+
+**Related PR**: #$PR_NUMBER
+**Dev Spec File**: \`${{ steps.check_spec.outputs.spec_file }}\`
+
+The dev spec is generated automatically when PRs implementing this user story are merged."
+            
+            NEW_ISSUE=$(gh issue create \
+              --title "$ISSUE_TITLE" \
+              --body "$ISSUE_BODY" \
+              --label "documentation,automation,$US_NUMBER")
+            
+            ISSUE_NUMBER=$(echo "$NEW_ISSUE" | grep -oE '[0-9]+$')
+            echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+            echo "✅ Created new issue #$ISSUE_NUMBER" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Commit Dev Spec
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          SPEC_FILE="${{ steps.check_spec.outputs.spec_file }}"
+          US_NUMBER="${{ steps.extract_story.outputs.us_number }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          ISSUE_NUMBER="${{ steps.issue.outputs.issue_number }}"
+          
+          git add "$SPEC_FILE"
+          
+          if git diff --cached --quiet; then
+            echo "ℹ️ No changes to commit (dev spec unchanged)" >> $GITHUB_STEP_SUMMARY
+          else
+            COMMIT_MSG="docs: Generate dev spec for $US_NUMBER from PR #$PR_NUMBER
+
+Relates to #$ISSUE_NUMBER
+
+This dev spec was automatically generated by the LLM-assisted documentation workflow."
+            
+            git commit -m "$COMMIT_MSG"
+            
+            echo "✅ Committed dev spec" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Push Changes
+        if: steps.extract_story.outputs.skip != 'true'
+        run: |
+          git push origin main || {
+            echo "⚠️ Failed to push to main (may need permissions)" >> $GITHUB_STEP_SUMMARY
+            echo "The dev spec was generated but not pushed." >> $GITHUB_STEP_SUMMARY
+            echo "See workflow artifacts for the generated file." >> $GITHUB_STEP_SUMMARY
+          }
+          
+          echo "🎉 Dev spec generation complete!" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload Dev Spec as Artifact
+        if: always() && steps.extract_story.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-dev-spec-${{ steps.extract_story.outputs.us_number }}
+          path: generated_dev_spec.md
