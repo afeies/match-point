@@ -199,3 +199,129 @@ describe("POST /api/tournaments/:id/checkin/close", () => {
     expect(lateCheckIn.status).toBe(409);
   });
 });
+
+describe("POST /api/tournaments/:id/checkin/:entrantId – edge cases", () => {
+  it("returns 404 when the entrantId is not registered for the tournament", async () => {
+    const app = createApp();
+    const { orgToken, tid } = await createTournamentAndEntrants(app, 1);
+
+    const res = await request(app)
+      .post(`/api/tournaments/${tid}/checkin/nonexistent-user-id`)
+      .set("Authorization", `Bearer ${orgToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when the tournament id is unknown", async () => {
+    const app = createApp();
+    const { orgToken, players } = await createTournamentAndEntrants(app, 1);
+
+    const res = await request(app)
+      .post(`/api/tournaments/does-not-exist/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${orgToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("is idempotent: checking in an already-checked-in entrant still returns 200 with checkedIn:true", async () => {
+    const app = createApp();
+    const { orgToken, tid, players } = await createTournamentAndEntrants(app, 1);
+
+    const first = await request(app)
+      .post(`/api/tournaments/${tid}/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${orgToken}`);
+    expect(first.status).toBe(200);
+    expect(first.body.checkedIn).toBe(true);
+
+    const second = await request(app)
+      .post(`/api/tournaments/${tid}/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${orgToken}`);
+    expect(second.status).toBe(200);
+    expect(second.body.checkedIn).toBe(true);
+  });
+
+  it("returns 401 when no auth token is provided", async () => {
+    const app = createApp();
+    const { tid, players } = await createTournamentAndEntrants(app, 1);
+
+    const res = await request(app).post(
+      `/api/tournaments/${tid}/checkin/${players[0].userId}`
+    );
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("DELETE /api/tournaments/:id/checkin/:entrantId – edge cases", () => {
+  it("returns 403 when a non-organizer player tries to reverse a check-in", async () => {
+    const app = createApp();
+    const { orgToken, tid, players } = await createTournamentAndEntrants(app, 2);
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${orgToken}`);
+
+    const res = await request(app)
+      .delete(`/api/tournaments/${tid}/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${players[1].token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when the entrantId is not registered for the tournament", async () => {
+    const app = createApp();
+    const { orgToken, tid } = await createTournamentAndEntrants(app, 1);
+
+    const res = await request(app)
+      .delete(`/api/tournaments/${tid}/checkin/nonexistent-user-id`)
+      .set("Authorization", `Bearer ${orgToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 when called after check-in has been closed", async () => {
+    const app = createApp();
+    const { orgToken, tid, players } = await createTournamentAndEntrants(app, 1);
+
+    await request(app)
+      .post(`/api/tournaments/${tid}/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${orgToken}`);
+    await request(app)
+      .post(`/api/tournaments/${tid}/checkin/close`)
+      .set("Authorization", `Bearer ${orgToken}`);
+
+    const res = await request(app)
+      .delete(`/api/tournaments/${tid}/checkin/${players[0].userId}`)
+      .set("Authorization", `Bearer ${orgToken}`);
+
+    expect(res.status).toBe(409);
+  });
+});
+
+describe("POST /api/tournaments/:id/checkin/close – edge cases", () => {
+  it("returns 403 when a non-organizer player tries to close check-in", async () => {
+    const app = createApp();
+    const { tid, players } = await createTournamentAndEntrants(app, 1);
+
+    const res = await request(app)
+      .post(`/api/tournaments/${tid}/checkin/close`)
+      .set("Authorization", `Bearer ${players[0].token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 409 when check-in has already been closed", async () => {
+    const app = createApp();
+    const { orgToken, tid } = await createTournamentAndEntrants(app, 1);
+
+    const first = await request(app)
+      .post(`/api/tournaments/${tid}/checkin/close`)
+      .set("Authorization", `Bearer ${orgToken}`);
+    expect(first.status).toBe(200);
+
+    const second = await request(app)
+      .post(`/api/tournaments/${tid}/checkin/close`)
+      .set("Authorization", `Bearer ${orgToken}`);
+    expect(second.status).toBe(409);
+  });
+});
