@@ -10,7 +10,7 @@ Automated tests run on **pull requests** and on **pushes** to `main`, `master`, 
 |----------|----------------|
 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | `npx tsc --noEmit`, `npm test` (API / Vitest), `frontend`: `npm test`, `npm run build` |
 
-The API test suite includes **US12 (match-call notifications)** in `src/notifications.test.ts` (Vitest + Supertest against the real Express app).
+The API test suite includes **US12 (match-call notifications)** in `src/notifications.test.ts` (Vitest + Supertest), plus bracket progression coverage in `src/bracket/bracketState.integration.test.ts`.
 
 ## Local checks (same gates as CI)
 

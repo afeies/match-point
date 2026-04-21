@@ -6,11 +6,13 @@ import {
   addEntrant,
   closeCheckIn,
   createTournament,
+  enqueueMatchReadyNotifications,
   getEntrants,
   getTournament,
   getTournamentBracket,
   getUserById,
   listTournaments,
+  reportBracketMatchWinner,
   setEntrantCheckedIn,
   setTournamentBracket,
   updateTournament,
@@ -272,6 +274,49 @@ router.delete(
 );
 
 /* ------------------------------------------------------------------ */
+/*  POST /api/tournaments/:id/matches/:matchId/winner — organizer      */
+/* ------------------------------------------------------------------ */
+const winnerBodySchema = z.object({
+  winnerUserId: z.string().uuid(),
+});
+
+router.post(
+  "/:id/matches/:matchId/winner",
+  requireAuth,
+  requireOrganizer,
+  (req: AuthedRequest, res) => {
+    const parsedBody = winnerBodySchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: parsedBody.error.flatten() });
+      return;
+    }
+
+    const tournament = getTournament(req.params.id);
+    if (!tournament) {
+      res.status(404).json({ error: "Tournament not found" });
+      return;
+    }
+
+    const result = reportBracketMatchWinner(
+      req.params.id,
+      req.params.matchId,
+      parsedBody.data.winnerUserId
+    );
+    if (result === undefined) {
+      res.status(404).json({ error: "Bracket not found" });
+      return;
+    }
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    enqueueMatchReadyNotifications(req.params.id, result.newlyReadyMatchIds);
+    res.json({ bracket: result.bracket });
+  }
+);
+
+/* ------------------------------------------------------------------ */
 /*  PATCH /api/tournaments/:id – update registration status           */
 /* ------------------------------------------------------------------ */
 const patchTournamentSchema = z.object({
@@ -346,8 +391,9 @@ router.post("/:id/bracket", requireAuth, requireOrganizer, (req: AuthedRequest, 
   }
 
   try {
-    const bracket = buildSingleEliminationBracket(tournament.id, players);
+    const { bracket, newlyReadyMatchIds } = buildSingleEliminationBracket(tournament.id, players);
     setTournamentBracket(tournament.id, bracket);
+    enqueueMatchReadyNotifications(tournament.id, newlyReadyMatchIds);
     res.status(200).json(bracket);
   } catch (e) {
     if (e instanceof BracketValidationError) {

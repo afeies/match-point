@@ -44,6 +44,8 @@ export interface BracketPlayer {
   displayName: string;
 }
 
+export type BracketMatchStatus = "pending" | "ready" | "complete";
+
 export interface BracketMatch {
   id: string;
   round: number;
@@ -51,6 +53,9 @@ export interface BracketMatch {
   player1: BracketPlayer | null;
   player2: BracketPlayer | null;
   advancesToMatchId: string | null;
+  status?: BracketMatchStatus;
+  winnerUserId?: string | null;
+  stationLabel?: string | null;
 }
 
 export interface BracketRound {

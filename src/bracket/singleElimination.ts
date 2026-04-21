@@ -1,4 +1,5 @@
 import type { BracketMatch, BracketPlayer, BracketResponse, BracketRound } from "../types.js";
+import { syncBracketDerivedState } from "./bracketState.js";
 
 function ceilLog2(n: number): number {
   if (n <= 1) return 0;
@@ -22,7 +23,7 @@ export function sortPlayersForSeeding(players: BracketPlayer[]): BracketPlayer[]
 export function buildSingleEliminationBracket(
   tournamentId: string,
   players: BracketPlayer[]
-): BracketResponse {
+): { bracket: BracketResponse; newlyReadyMatchIds: string[] } {
   if (players.length < 2) {
     throw new BracketValidationError("At least two players are required to generate a bracket.");
   }
@@ -57,6 +58,9 @@ export function buildSingleEliminationBracket(
           player1: p1,
           player2: p2,
           advancesToMatchId: r < roundCount ? `r${r + 1}-m${Math.floor(m / 2) + 1}` : null,
+          status: "pending",
+          winnerUserId: null,
+          stationLabel: null,
         });
       }
     } else {
@@ -73,6 +77,9 @@ export function buildSingleEliminationBracket(
           player1: p1,
           player2: p2,
           advancesToMatchId: r < roundCount ? `r${r + 1}-m${Math.floor(m / 2) + 1}` : null,
+          status: "pending",
+          winnerUserId: null,
+          stationLabel: null,
         });
       }
     }
@@ -80,12 +87,16 @@ export function buildSingleEliminationBracket(
     rounds.push({ round: r, matches });
   }
 
-  return {
+  const bracket: BracketResponse = {
     tournamentId,
     playerCount: n,
     roundCount,
     rounds,
   };
+
+  const newlyReadyMatchIds = syncBracketDerivedState(bracket);
+
+  return { bracket, newlyReadyMatchIds };
 }
 
 function resolveAdvance(prev: BracketMatch): BracketPlayer | null {
