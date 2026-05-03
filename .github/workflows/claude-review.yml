@@ -93,7 +93,8 @@ jobs:
           BASE="${{ steps.pr.outputs.base_sha }}"
           HEAD="${{ steps.pr.outputs.head_sha }}"
           # Cap the diff at ~200KB so we stay within model input budget.
-          git diff --no-color "$BASE"..."$HEAD" | head -c 200000 > .claude-review/diff.patch
+          # SIGPIPE (141) is expected when head closes the pipe early, so ignore it
+          git diff --no-color "$BASE"..."$HEAD" | head -c 200000 > .claude-review/diff.patch || test $? -eq 141
           git diff --name-status "$BASE"..."$HEAD" > .claude-review/files.txt
           echo "bytes=$(wc -c < .claude-review/diff.patch)" >> "$GITHUB_OUTPUT"
 
