@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { verifyToken } from "../auth/token.js";
-import { getUserById } from "../store.js";
+import { getUserById, hasActivePremiumSubscription } from "../store.js";
 
 export interface AuthedRequest extends Request {
   userId?: string;
@@ -31,8 +31,27 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
 
 export function requireOrganizer(req: AuthedRequest, res: Response, next: NextFunction): void {
   if (req.userRole !== "organizer") {
-    res.status(403).json({ error: "Organizer role required" });
+    res.status(403).json({ error: "Must be an organizer to access this resource" });
     return;
   }
+  next();
+}
+
+export function requirePremium(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  if (!hasActivePremiumSubscription(userId)) {
+    res.status(403).json({ error: "This feature requires an active premium subscription" });
+    return;
+  }
+
   next();
 }

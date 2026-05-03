@@ -17,6 +17,7 @@ import type {
   UserStats,
   Replay,
   Follow,
+  Subscription,
 } from "./types.js";
 
 const users = new Map<string, User>();
@@ -31,6 +32,8 @@ const replays = new Map<string, Replay>();
 const replaysByTournament = new Map<string, string[]>();
 const follows = new Map<string, Follow>();
 const followersByUser = new Map<string, Set<string>>(); // userId -> Set of follower IDs
+const subscriptions = new Map<string, Subscription>();
+const subscriptionsByUser = new Map<string, string>(); // userId -> subscriptionId
 const followingByUser = new Map<string, Set<string>>(); // userId -> Set of following IDs
 const matchReadyNotificationKeys = new Set<string>();
 
@@ -960,4 +963,97 @@ export function getUserFollowers(userId: string, page = 1, page_size = 20): Pagi
 export function isFollowing(followerId: string, followingId: string): boolean {
   const following = followingByUser.get(followerId);
   return following ? following.has(followingId) : false;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Subscription Functions                                            */
+/* ------------------------------------------------------------------ */
+
+export function createSubscription(userId: string, priceId: string): Subscription | null {
+  const user = users.get(userId);
+  if (!user) return null;
+
+  // Check if user already has active or pending subscription
+  const existingSubscription = getUserSubscription(userId);
+  if (existingSubscription && (existingSubscription.status === "active" || existingSubscription.status === "pending")) {
+    return null; // Already has active or pending subscription
+  }
+
+  const subscription: Subscription = {
+    id: randomUUID(),
+    userId,
+    priceId,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    clientSecret: `pi_${randomUUID()}`, // Mock Stripe payment intent format
+  };
+
+  subscriptions.set(subscription.id, subscription);
+  subscriptionsByUser.set(userId, subscription.id);
+
+  return subscription;
+}
+
+export function getSubscriptionById(subscriptionId: string): Subscription | undefined {
+  return subscriptions.get(subscriptionId);
+}
+
+export function getUserSubscription(userId: string): Subscription | null {
+  const subscriptionId = subscriptionsByUser.get(userId);
+  if (!subscriptionId) return null;
+  
+  const subscription = subscriptions.get(subscriptionId);
+  if (!subscription) return null;
+
+  // Check if subscription is expired
+  if (subscription.status === "active" && subscription.expiryDate) {
+    if (new Date(subscription.expiryDate) < new Date()) {
+      subscription.status = "expired";
+    }
+  }
+
+  return subscription;
+}
+
+export function activateSubscription(
+  subscriptionId: string,
+  expiryDate?: string
+): Subscription | null {
+  const subscription = subscriptions.get(subscriptionId);
+  if (!subscription) return null;
+
+  subscription.status = "active";
+  subscription.activatedAt = new Date().toISOString();
+  
+  // Default to 30 days from now if no expiry date provided
+  if (expiryDate) {
+    subscription.expiryDate = expiryDate;
+  } else {
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 30);
+    subscription.expiryDate = expiry.toISOString();
+  }
+
+  return subscription;
+}
+
+export function cancelSubscription(
+  subscriptionId: string,
+  requesterId: string
+): "ok" | "not_found" | "forbidden" {
+  const subscription = subscriptions.get(subscriptionId);
+  if (!subscription) return "not_found";
+
+  if (subscription.userId !== requesterId) return "forbidden";
+
+  subscription.status = "cancelled";
+  subscription.cancelledAt = new Date().toISOString();
+
+  return "ok";
+}
+
+export function hasActivePremiumSubscription(userId: string): boolean {
+  const subscription = getUserSubscription(userId);
+  if (!subscription) return false;
+  return subscription.status === "active";
 }
