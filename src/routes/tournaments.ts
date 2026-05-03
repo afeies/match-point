@@ -16,7 +16,9 @@ import {
   reportBracketMatchWinner,
   setEntrantCheckedIn,
   setTournamentBracket,
+  submitMatchScore,
   updateTournament,
+  getReplaysByTournament,
 } from "../store.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 import { requireAuth, requireOrganizer } from "../middleware/auth.js";
@@ -322,6 +324,66 @@ const reportWinnerSchema = z.object({
   winnerUserId: z.string().uuid(),
 });
 
+/* ------------------------------------------------------------------ */
+/*  PUT /api/tournaments/:id/matches/:matchId/score – submit score    */
+/* ------------------------------------------------------------------ */
+const submitScoreSchema = z.object({
+  player1Score: z.number().int().min(0),
+  player2Score: z.number().int().min(0),
+});
+
+router.put(
+  "/:id/matches/:matchId/score",
+  requireAuth,
+  requireOrganizer,
+  (req: AuthedRequest, res) => {
+    const parsed = submitScoreSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const { player1Score, player2Score } = parsed.data;
+
+    // Validate no ties
+    if (player1Score === player2Score) {
+      res.status(400).json({ error: "Scores cannot be tied - there must be a winner" });
+      return;
+    }
+
+    const tournament = getTournament(req.params.id);
+    if (!tournament) {
+      res.status(404).json({ error: "Tournament not found" });
+      return;
+    }
+
+    try {
+      const result = submitMatchScore(
+        req.params.id,
+        req.params.matchId,
+        player1Score,
+        player2Score
+      );
+
+      if (!result) {
+        res.status(404).json({ error: "Match not found" });
+        return;
+      }
+
+      res.status(200).json({ match: result.match, bracket: result.bracket });
+    } catch (e) {
+      if (e instanceof Error) {
+        res.status(400).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/*  POST /api/tournaments/:id/matches/:matchId/winner                 */
+/* ------------------------------------------------------------------ */
 router.post(
   "/:id/matches/:matchId/winner",
   requireAuth,
@@ -427,6 +489,14 @@ router.get("/:id", (req, res) => {
     checkInClosed: tournament.checkInClosed,
     entrants,
   });
+});
+
+/* ------------------------------------------------------------------ */
+/*  GET /api/tournaments/:id/replays – list replays for tournament    */
+/* ------------------------------------------------------------------ */
+router.get("/:id/replays", (req, res) => {
+  const replays = getReplaysByTournament(req.params.id);
+  res.json(replays);
 });
 
 export default router;

@@ -15,6 +15,7 @@ import type {
   User,
   UserRole,
   UserStats,
+  Replay,
 } from "./types.js";
 
 const users = new Map<string, User>();
@@ -25,6 +26,8 @@ const entrantsByTournament = new Map<string, Entrant[]>();
 const bracketsByTournament = new Map<string, BracketResponse>();
 const matchResults = new Map<string, Map<string, MatchResult>>();
 const notificationsById = new Map<string, MatchCallNotification>();
+const replays = new Map<string, Replay>();
+const replaysByTournament = new Map<string, string[]>();
 const matchReadyNotificationKeys = new Set<string>();
 
 function matchReadyKey(tournamentId: string, matchId: string, playerId: string): string {
@@ -100,6 +103,55 @@ export function reportBracketMatchWinner(
   if (!bracket) return undefined;
   const newlyReady = applyMatchWinner(bracket, matchId, winnerUserId);
   return { bracket, newlyReadyMatchIds: newlyReady };
+}
+
+export function submitMatchScore(
+  tournamentId: string,
+  matchId: string,
+  player1Score: number,
+  player2Score: number
+): { match: import("./types.js").BracketMatch; bracket: BracketResponse } | undefined {
+  const bracket = bracketsByTournament.get(tournamentId);
+  if (!bracket) return undefined;
+
+  const match = findMatch(bracket, matchId);
+  if (!match) return undefined;
+
+  // Validate match is not already complete
+  if (match.status === "complete") {
+    throw new Error("Match is already complete and cannot be updated");
+  }
+
+  // Validate scores
+  if (player1Score < 0 || player2Score < 0) {
+    throw new Error("Scores cannot be negative");
+  }
+
+  if (!Number.isInteger(player1Score) || !Number.isInteger(player2Score)) {
+    throw new Error("Scores must be integers");
+  }
+
+  if (player1Score === player2Score) {
+    throw new Error("Scores cannot be tied - there must be a winner");
+  }
+
+  // Determine winner
+  const winnerUserId =
+    player1Score > player2Score ? match.player1?.userId : match.player2?.userId;
+
+  if (!winnerUserId) {
+    throw new Error("Cannot determine winner - missing player data");
+  }
+
+  // Update match scores
+  match.player1Score = player1Score;
+  match.player2Score = player2Score;
+
+  // Advance winner to next round (this will set winnerUserId and status to complete)
+  const newlyReady = applyMatchWinner(bracket, matchId, winnerUserId);
+  enqueueMatchReadyNotifications(tournamentId, newlyReady);
+
+  return { match, bracket };
 }
 
 export function setMatchStationLabel(
@@ -224,6 +276,9 @@ export function createTournament(input: {
   organizerId: string;
   maxEntrants?: number | null;
   registrationOpen?: boolean;
+  startDate?: string;
+  venue?: string;
+  city?: string;
 }): Tournament {
   const id = randomUUID();
   const tournament: Tournament = {
@@ -235,6 +290,9 @@ export function createTournament(input: {
     registrationOpen: input.registrationOpen ?? true,
     createdAt: new Date().toISOString(),
     checkInClosed: false,
+    startDate: input.startDate,
+    venue: input.venue,
+    city: input.city,
   };
   tournaments.set(id, tournament);
   entrantsByTournament.set(id, []);
@@ -299,7 +357,37 @@ export function setTournamentBracket(tournamentId: string, bracket: BracketRespo
 }
 
 export function getTournamentBracket(tournamentId: string): BracketResponse | undefined {
-  return bracketsByTournament.get(tournamentId);
+  const bracket = bracketsByTournament.get(tournamentId);
+  if (!bracket) return undefined;
+
+  // Check if tournament is complete and add winner
+  const finalRound = bracket.rounds[bracket.rounds.length - 1];
+  if (finalRound && finalRound.matches.length > 0) {
+    const finalMatch = finalRound.matches[0];
+    if (finalMatch && finalMatch.status === "complete" && finalMatch.winnerUserId) {
+      const winner =
+        finalMatch.player1?.userId === finalMatch.winnerUserId
+          ? finalMatch.player1
+          : finalMatch.player2;
+      return {
+        ...bracket,
+        tournamentWinner: winner ?? null,
+      };
+    }
+  }
+
+  // Handle single-player tournament
+  if (bracket.playerCount === 1 && bracket.rounds.length > 0) {
+    const firstMatch = bracket.rounds[0]?.matches[0];
+    if (firstMatch?.player1) {
+      return {
+        ...bracket,
+        tournamentWinner: firstMatch.player1,
+      };
+    }
+  }
+
+  return bracket;
 }
 
 export function setMatchResult(
@@ -409,4 +497,329 @@ export function __resetStoreForTests(): void {
   matchResults.clear();
   notificationsById.clear();
   matchReadyNotificationKeys.clear();
+  replays.clear();
+  replaysByTournament.clear();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Replay Functions                                                  */
+/* ------------------------------------------------------------------ */
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB
+
+export function createReplay(input: {
+  tournamentId: string;
+  title: string;
+  game: string;
+  playerNames: string[];
+  uploadedBy: string;
+  videoUrl: string;
+  fileSize: number;
+}): Replay {
+  const replay: Replay = {
+    id: randomUUID(),
+    tournamentId: input.tournamentId,
+    title: input.title,
+    game: input.game,
+    playerNames: input.playerNames,
+    uploadedBy: input.uploadedBy,
+    videoUrl: input.videoUrl,
+    uploadedAt: new Date().toISOString(),
+    fileSize: input.fileSize,
+  };
+
+  replays.set(replay.id, replay);
+
+  // Add to tournament's replay list
+  const tournamentReplays = replaysByTournament.get(input.tournamentId) ?? [];
+  tournamentReplays.push(replay.id);
+  replaysByTournament.set(input.tournamentId, tournamentReplays);
+
+  return replay;
+}
+
+export function getReplayById(id: string): Replay | undefined {
+  return replays.get(id);
+}
+
+export function getReplaysByTournament(tournamentId: string): Replay[] {
+  const replayIds = replaysByTournament.get(tournamentId) ?? [];
+  return replayIds
+    .map((id) => replays.get(id))
+    .filter((r): r is Replay => r !== undefined)
+    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+}
+
+export function validateReplayFileSize(fileSize: number): boolean {
+  return fileSize > 0 && fileSize <= MAX_FILE_SIZE;
+}
+
+export interface ReplaySearchParams {
+  game?: string;
+  event_id?: string;
+  player_name?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface PaginatedReplays {
+  data: Replay[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export function searchReplays(params: ReplaySearchParams): PaginatedReplays {
+  const {
+    game,
+    event_id,
+    player_name,
+    page = 1,
+    page_size = 20,
+  } = params;
+
+  // Validate and normalize pagination params
+  const validPage = Math.max(1, Number.isInteger(page) && page > 0 ? page : 1);
+  const validPageSize = Math.min(
+    100,
+    Math.max(1, Number.isInteger(page_size) && page_size > 0 ? page_size : 20)
+  );
+
+  // Get all replays and sort in reverse chronological order
+  let results = Array.from(replays.values()).sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+  );
+
+  // Apply filters
+  if (game) {
+    const gameLower = game.toLowerCase();
+    results = results.filter((r) => r.game.toLowerCase() === gameLower);
+  }
+
+  if (event_id) {
+    results = results.filter((r) => r.tournamentId === event_id);
+  }
+
+  if (player_name) {
+    const playerNameLower = player_name.toLowerCase();
+    results = results.filter((r) =>
+      r.playerNames.some((name) => name.toLowerCase().includes(playerNameLower))
+    );
+  }
+
+  const total = results.length;
+  const totalPages = Math.ceil(total / validPageSize);
+
+  // Apply pagination
+  const startIndex = (validPage - 1) * validPageSize;
+  const endIndex = startIndex + validPageSize;
+  const paginatedResults = results.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedResults,
+    total,
+    page: validPage,
+    pageSize: validPageSize,
+    totalPages,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Event Discovery Functions                                         */
+/* ------------------------------------------------------------------ */
+
+export interface EventSearchParams {
+  game?: string;
+  city?: string;
+  radius_km?: number;
+}
+
+export interface EventResponse {
+  id: string;
+  name: string;
+  game: string;
+  startDate?: string;
+  venue?: string;
+  city?: string;
+  entrantCount: number;
+  maxEntrants: number | null;
+  registrationOpen: boolean;
+}
+
+export function searchEvents(params: EventSearchParams): EventResponse[] {
+  const { game, city } = params;
+
+  const now = new Date();
+
+  // Get all tournaments
+  let results = Array.from(tournaments.values())
+    // Filter out past events (exclude events with startDate in the past)
+    .filter((t) => {
+      if (!t.startDate) return true; // Include if no start date
+      return new Date(t.startDate) >= now;
+    });
+
+  // Apply filters
+  if (game) {
+    const gameLower = game.toLowerCase();
+    results = results.filter((t) => t.game.toLowerCase() === gameLower);
+  }
+
+  if (city) {
+    const cityLower = city.toLowerCase();
+    results = results.filter((t) => t.city?.toLowerCase() === cityLower);
+  }
+
+  // Sort by startDate ascending (soonest first)
+  results.sort((a, b) => {
+    if (!a.startDate) return 1; // No date goes last
+    if (!b.startDate) return -1;
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+  });
+
+  // Map to EventResponse with entrant count
+  return results.map((t) => ({
+    id: t.id,
+    name: t.name,
+    game: t.game,
+    startDate: t.startDate,
+    venue: t.venue,
+    city: t.city,
+    entrantCount: getEntrants(t.id).length,
+    maxEntrants: t.maxEntrants,
+    registrationOpen: t.registrationOpen,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Leaderboard Functions                                             */
+/* ------------------------------------------------------------------ */
+
+// Points system based on placement
+function getPointsForPlacement(placement: number): number {
+  if (placement === 1) return 100;
+  if (placement === 2) return 75;
+  if (placement <= 4) return 50;
+  if (placement <= 8) return 25;
+  return 10; // Participation points
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  displayName: string;
+  points: number;
+  totalWins: number;
+  totalTournaments: number;
+}
+
+export interface LeaderboardResponse {
+  data: LeaderboardEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  playerRank?: LeaderboardEntry;
+}
+
+export function getLeaderboard(params: {
+  game: string;
+  player_id?: string;
+  page?: number;
+  page_size?: number;
+}): LeaderboardResponse | null {
+  const { game, player_id, page = 1, page_size = 20 } = params;
+
+  if (!game) return null;
+
+  const gameLower = game.toLowerCase();
+
+  // Validate pagination
+  const validPage = Math.max(1, Number.isInteger(page) && page > 0 ? page : 1);
+  const validPageSize = Math.min(
+    100,
+    Math.max(1, Number.isInteger(page_size) && page_size > 0 ? page_size : 20)
+  );
+
+  // Aggregate player stats across finalized tournaments
+  const playerStats = new Map<
+    string,
+    { points: number; wins: number; tournaments: number; displayName: string }
+  >();
+
+  for (const tournament of tournaments.values()) {
+    if (!tournament.finalized) continue;
+    if (tournament.game.toLowerCase() !== gameLower) continue;
+
+    const results = matchResults.get(tournament.id);
+    if (!results) continue;
+
+    for (const [userId, result] of results) {
+      const user = users.get(userId);
+      if (!user) continue;
+
+      const stats = playerStats.get(userId) ?? {
+        points: 0,
+        wins: 0,
+        tournaments: 0,
+        displayName: user.displayName,
+      };
+
+      stats.points += getPointsForPlacement(result.placement);
+      stats.wins += result.wins;
+      stats.tournaments += 1;
+
+      playerStats.set(userId, stats);
+    }
+  }
+
+  // Convert to array and sort
+  const entries: LeaderboardEntry[] = Array.from(playerStats.entries())
+    .map(([userId, stats]) => ({
+      rank: 0, // Will be assigned after sorting
+      userId,
+      displayName: stats.displayName,
+      points: stats.points,
+      totalWins: stats.wins,
+      totalTournaments: stats.tournaments,
+    }))
+    .sort((a, b) => {
+      // Sort by points descending
+      if (b.points !== a.points) return b.points - a.points;
+      // Tiebreaker 1: total wins descending
+      if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+      // Tiebreaker 2: total tournaments descending
+      if (b.totalTournaments !== a.totalTournaments) return b.totalTournaments - a.totalTournaments;
+      // Tiebreaker 3: userId alphabetically
+      return a.userId.localeCompare(b.userId);
+    });
+
+  // Assign ranks
+  entries.forEach((entry, index) => {
+    entry.rank = index + 1;
+  });
+
+  const total = entries.length;
+  const totalPages = Math.ceil(total / validPageSize);
+
+  // Find player rank if requested
+  let playerRank: LeaderboardEntry | undefined;
+  if (player_id) {
+    playerRank = entries.find((e) => e.userId === player_id);
+  }
+
+  // Apply pagination
+  const startIndex = (validPage - 1) * validPageSize;
+  const endIndex = startIndex + validPageSize;
+  const paginatedEntries = entries.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedEntries,
+    total,
+    page: validPage,
+    pageSize: validPageSize,
+    totalPages,
+    playerRank,
+  };
 }

@@ -60,6 +60,8 @@ export function buildSingleEliminationBracket(
           status: "pending",
           winnerUserId: null,
           stationLabel: null,
+          player1Score: null,
+          player2Score: null,
         });
       }
     } else {
@@ -77,6 +79,8 @@ export function buildSingleEliminationBracket(
           player2: p2,
           advancesToMatchId: r < roundCount ? `r${r + 1}-m${Math.floor(m / 2) + 1}` : null,
           status: "pending",
+          player1Score: null,
+          player2Score: null,
           winnerUserId: null,
           stationLabel: null,
         });
