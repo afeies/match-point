@@ -7,6 +7,7 @@ import notificationRoutes from "./routes/notifications.js";
 import tournamentRoutes from "./routes/tournaments.js";
 import userRoutes from "./routes/users.js";
 import replayRoutes from "./routes/replays.js";
+import eventRoutes from "./routes/events.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +30,7 @@ export function createApp() {
   app.use("/api/users", userRoutes);
   app.use("/api/replays", replayRoutes);
   app.use("/api/notifications", notificationRoutes);
+  app.use("/api/events", eventRoutes);
 
   const isProd = process.env.NODE_ENV === "production";
   if (isProd) {

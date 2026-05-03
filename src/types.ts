@@ -35,6 +35,9 @@ export interface Tournament {
   createdAt: string;
   checkInClosed: boolean;
   finalized?: boolean;
+  startDate?: string;
+  venue?: string;
+  city?: string;
 }
 
 export interface Entrant {

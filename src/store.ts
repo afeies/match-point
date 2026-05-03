@@ -276,6 +276,9 @@ export function createTournament(input: {
   organizerId: string;
   maxEntrants?: number | null;
   registrationOpen?: boolean;
+  startDate?: string;
+  venue?: string;
+  city?: string;
 }): Tournament {
   const id = randomUUID();
   const tournament: Tournament = {
@@ -287,6 +290,9 @@ export function createTournament(input: {
     registrationOpen: input.registrationOpen ?? true,
     createdAt: new Date().toISOString(),
     checkInClosed: false,
+    startDate: input.startDate,
+    venue: input.venue,
+    city: input.city,
   };
   tournaments.set(id, tournament);
   entrantsByTournament.set(id, []);
@@ -617,4 +623,71 @@ export function searchReplays(params: ReplaySearchParams): PaginatedReplays {
     pageSize: validPageSize,
     totalPages,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Event Discovery Functions                                         */
+/* ------------------------------------------------------------------ */
+
+export interface EventSearchParams {
+  game?: string;
+  city?: string;
+  radius_km?: number;
+}
+
+export interface EventResponse {
+  id: string;
+  name: string;
+  game: string;
+  startDate?: string;
+  venue?: string;
+  city?: string;
+  entrantCount: number;
+  maxEntrants: number | null;
+  registrationOpen: boolean;
+}
+
+export function searchEvents(params: EventSearchParams): EventResponse[] {
+  const { game, city } = params;
+
+  const now = new Date();
+
+  // Get all tournaments
+  let results = Array.from(tournaments.values())
+    // Filter out past events (exclude events with startDate in the past)
+    .filter((t) => {
+      if (!t.startDate) return true; // Include if no start date
+      return new Date(t.startDate) >= now;
+    });
+
+  // Apply filters
+  if (game) {
+    const gameLower = game.toLowerCase();
+    results = results.filter((t) => t.game.toLowerCase() === gameLower);
+  }
+
+  if (city) {
+    const cityLower = city.toLowerCase();
+    results = results.filter((t) => t.city?.toLowerCase() === cityLower);
+  }
+
+  // Sort by startDate ascending (soonest first)
+  results.sort((a, b) => {
+    if (!a.startDate) return 1; // No date goes last
+    if (!b.startDate) return -1;
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+  });
+
+  // Map to EventResponse with entrant count
+  return results.map((t) => ({
+    id: t.id,
+    name: t.name,
+    game: t.game,
+    startDate: t.startDate,
+    venue: t.venue,
+    city: t.city,
+    entrantCount: getEntrants(t.id).length,
+    maxEntrants: t.maxEntrants,
+    registrationOpen: t.registrationOpen,
+  }));
 }
