@@ -5,12 +5,30 @@ import { requireAuth, requireOrganizer } from "../middleware/auth.js";
 import {
   createReplay,
   getReplayById,
-  getReplaysByTournament,
   getTournament,
   validateReplayFileSize,
+  searchReplays,
 } from "../store.js";
 
 const router = Router();
+
+/* ------------------------------------------------------------------ */
+/*  GET /api/replays – search and browse replays                      */
+/* ------------------------------------------------------------------ */
+router.get("/", (req, res) => {
+  const { game, event_id, player_name, page, page_size } = req.query;
+
+  const searchParams = {
+    game: game as string | undefined,
+    event_id: event_id as string | undefined,
+    player_name: player_name as string | undefined,
+    page: page ? parseInt(page as string, 10) : undefined,
+    page_size: page_size ? parseInt(page_size as string, 10) : undefined,
+  };
+
+  const results = searchReplays(searchParams);
+  res.json(results);
+});
 
 /* ------------------------------------------------------------------ */
 /*  POST /api/replays – upload replay                                 */

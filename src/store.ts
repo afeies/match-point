@@ -547,3 +547,74 @@ export function getReplaysByTournament(tournamentId: string): Replay[] {
 export function validateReplayFileSize(fileSize: number): boolean {
   return fileSize > 0 && fileSize <= MAX_FILE_SIZE;
 }
+
+export interface ReplaySearchParams {
+  game?: string;
+  event_id?: string;
+  player_name?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface PaginatedReplays {
+  data: Replay[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export function searchReplays(params: ReplaySearchParams): PaginatedReplays {
+  const {
+    game,
+    event_id,
+    player_name,
+    page = 1,
+    page_size = 20,
+  } = params;
+
+  // Validate and normalize pagination params
+  const validPage = Math.max(1, Number.isInteger(page) && page > 0 ? page : 1);
+  const validPageSize = Math.min(
+    100,
+    Math.max(1, Number.isInteger(page_size) && page_size > 0 ? page_size : 20)
+  );
+
+  // Get all replays and sort in reverse chronological order
+  let results = Array.from(replays.values()).sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+  );
+
+  // Apply filters
+  if (game) {
+    const gameLower = game.toLowerCase();
+    results = results.filter((r) => r.game.toLowerCase() === gameLower);
+  }
+
+  if (event_id) {
+    results = results.filter((r) => r.tournamentId === event_id);
+  }
+
+  if (player_name) {
+    const playerNameLower = player_name.toLowerCase();
+    results = results.filter((r) =>
+      r.playerNames.some((name) => name.toLowerCase().includes(playerNameLower))
+    );
+  }
+
+  const total = results.length;
+  const totalPages = Math.ceil(total / validPageSize);
+
+  // Apply pagination
+  const startIndex = (validPage - 1) * validPageSize;
+  const endIndex = startIndex + validPageSize;
+  const paginatedResults = results.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedResults,
+    total,
+    page: validPage,
+    pageSize: validPageSize,
+    totalPages,
+  };
+}
