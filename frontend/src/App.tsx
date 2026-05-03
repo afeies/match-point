@@ -13,6 +13,7 @@ import { TournamentCheckInPage } from "./pages/TournamentCheckInPage";
 import { PlayerProfilePage } from "./pages/PlayerProfilePage";
 import { PlayersPage } from "./pages/PlayersPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { PremiumPage } from "./pages/PremiumPage";
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/players/:id" element={<PlayerProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/premium" element={<PremiumPage />} />
             <Route path="/new" element={<NewTournament />} />
           </Route>
 

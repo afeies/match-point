@@ -184,7 +184,9 @@ export function DashboardPage() {
           <span className="dashboard-premium-badge">PREMIUM FEATURE</span>
           <h3>Unlock Advanced Bracket Logic</h3>
           <p>Double elimination, round robins, and custom Swiss systems are now available.</p>
-          <button type="button">Upgrade Now</button>
+          <Link to="/premium" style={{ textDecoration: "none" }}>
+            <button type="button">Upgrade Now</button>
+          </Link>
         </div>
       </div>
     </>

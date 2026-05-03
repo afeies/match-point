@@ -260,7 +260,7 @@ export function DashboardLayout({ children }: { children?: ReactNode }) {
             </button>
             <div className="dashboard-search">
               <Search size={18} color="#94a3b8" />
-              <input type="search" placeholder={searchPlaceholder} readOnly aria-label="Search" />
+              <input type="search" placeholder={searchPlaceholder} aria-label="Search" />
             </div>
             <div className="dashboard-notify-wrap" ref={notifyWrapRef}>
               <button
