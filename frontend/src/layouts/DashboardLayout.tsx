@@ -11,6 +11,10 @@ import {
   Trophy,
   Users,
   X,
+  Film,
+  Calendar,
+  TrendingUp,
+  Crown,
 } from "lucide-react";
 import { api, type MatchCallNotificationDTO } from "../api";
 import { useAuth } from "../auth-context";
@@ -180,7 +184,11 @@ export function DashboardLayout({ children }: { children?: ReactNode }) {
           <nav className="dashboard-nav" onClick={closeSidebar}>
             <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" />
             <TournamentsNavLink />
+            <NavItem to="/events" icon={Calendar} label="Events" />
             <NavItem to="/players" icon={Users} label="Players" />
+            <NavItem to="/leaderboard" icon={TrendingUp} label="Leaderboard" />
+            <NavItem to="/replays" icon={Film} label="Replays" />
+            <NavItem to="/premium" icon={Crown} label="Premium" />
             <NavItem to="/settings" icon={Settings} label="Settings" />
           </nav>
           {isPublicBracketRoute ? (
