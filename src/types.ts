@@ -64,6 +64,10 @@ export interface BracketMatch {
   winnerUserId: string | null;
   /** Optional station / setup label shown to players (e.g. "Stream", "Setup 3"). */
   stationLabel?: string | null;
+  /** Score for player 1 (null if match not yet scored) */
+  player1Score: number | null;
+  /** Score for player 2 (null if match not yet scored) */
+  player2Score: number | null;
 }
 
 export type MatchCallNotificationKind = "match_call";
@@ -102,6 +106,7 @@ export interface BracketResponse {
   playerCount: number;
   roundCount: number;
   rounds: BracketRound[];
+  tournamentWinner?: BracketPlayer | null;
 }
 
 export interface MatchResult {
