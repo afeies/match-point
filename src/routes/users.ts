@@ -14,6 +14,8 @@ import {
   softDeleteUser,
   toPublicUserProfile,
   updateUserProfile,
+  getUserFollowing,
+  getUserFollowers,
 } from "../store.js";
 
 const router = Router();
@@ -178,6 +180,38 @@ router.delete("/:id", requireAuth, (req: AuthedRequest, res) => {
   }
 
   res.status(204).send();
+});
+
+/* ------------------------------------------------------------------ */
+/*  GET /api/users/:id/following – list users being followed          */
+/* ------------------------------------------------------------------ */
+router.get("/:id/following", requireAuth, (req, res) => {
+  const userId = req.params.id;
+  const { page, page_size } = req.query;
+
+  const result = getUserFollowing(
+    userId,
+    page ? parseInt(page as string, 10) : undefined,
+    page_size ? parseInt(page_size as string, 10) : undefined
+  );
+
+  res.json(result);
+});
+
+/* ------------------------------------------------------------------ */
+/*  GET /api/users/:id/followers – list followers                     */
+/* ------------------------------------------------------------------ */
+router.get("/:id/followers", requireAuth, (req, res) => {
+  const userId = req.params.id;
+  const { page, page_size } = req.query;
+
+  const result = getUserFollowers(
+    userId,
+    page ? parseInt(page as string, 10) : undefined,
+    page_size ? parseInt(page_size as string, 10) : undefined
+  );
+
+  res.json(result);
 });
 
 export default router;
