@@ -17,36 +17,59 @@ No new tables/maps: both fields live inside the existing `entrantsByTournament` 
 - `setEntrantCheckedIn(tournamentId, entrantUserId, checkedIn) → Entrant | undefined` — flips the flag on a single entrant; returns the updated entrant or `undefined` if the tournament/entrant does not exist.
 - `closeCheckIn(tournamentId) → Tournament | undefined` — sets `checkInClosed = true` on the tournament; returns the updated tournament.
 
-`createTournament` must initialize `checkInClosed: false`; `addEntrant` must default `checkedIn` to `false` when the field is missing on the input.
+`createTournament` must initialize `checkInClosed: false`; entrants created via `POST /register` must default `checkedIn` to `false`.
 
 ## 2. Endpoints
 
-All four live in `src/routes/tournaments.ts`. All four use the existing `requireAuth` + `requireOrganizer` middleware chain (except where noted).
+All routes live in `src/routes/tournaments.ts` and use the existing `requireAuth` + `requireOrganizer` middleware chain.
 
 | Method | Path | Auth | Behavior |
 |---|---|---|---|
-| `POST` | `/api/tournaments/:id/checkin/:entrantId` | organizer | 404 if tournament/entrant missing; 409 if `checkInClosed`; otherwise sets `checkedIn: true` and returns `200 { entrant }`. |
-| `DELETE` | `/api/tournaments/:id/checkin/:entrantId` | organizer | Same errors as above; sets `checkedIn: false`; returns `200 { entrant }`. |
-| `POST` | `/api/tournaments/:id/checkin/close` | organizer | 404 if missing; 409 if already closed; sets `checkInClosed: true`; returns `200 { tournament }`. |
+| `POST` | `/api/tournaments/:id/checkin/close` | organizer | 404 if tournament missing; 409 if already `checkInClosed`; sets `checkInClosed: true`; returns `200` with `{ id, name, game, maxEntrants, registrationOpen, checkInClosed }`. |
+| `POST` | `/api/tournaments/:id/checkin/:entrantId` | organizer | 404 if tournament missing; 409 if `checkInClosed`; 404 if entrant missing; sets `checkedIn: true`; returns `200` with `{ userId, displayName, gameSelection, registeredAt, checkedIn }`. |
+| `DELETE` | `/api/tournaments/:id/checkin/:entrantId` | organizer | 404 if tournament missing; 409 if `checkInClosed`; 404 if entrant missing; sets `checkedIn: false`; returns `200` with `{ userId, displayName, gameSelection, registeredAt, checkedIn }`. |
 
-Plus two modifications to existing endpoints:
+> **Route ordering note:** `POST /:id/checkin/close` must be registered **before** `POST /:id/checkin/:entrantId` so the literal segment `close` is not treated as an `:entrantId` parameter.
 
-- `POST /api/tournaments/:id/bracket` — returns **409** (`"Check-in must be closed before generating the bracket"`) when `checkInClosed === false` *and* the request body does not include an explicit `players` array (so the US1 tests that pass explicit players continue to work). When `checkInClosed === true` and `players` is omitted, bracket generation filters out entrants where `checkedIn === false`.
-- `GET /api/tournaments/:id/entrants` — each entrant in the response includes `checkedIn: boolean`. `GET /api/tournaments/:id` likewise exposes `checkInClosed` on the tournament and `checkedIn` on each embedded entrant.
+Modifications to existing endpoints:
 
-`:entrantId` in the path is the `userId` of the entrant (consistent with how other code references entrants).
+- `POST /api/tournaments/:id/bracket` — when `req.body.players` is absent or empty, returns **409** (`"Check-in must be closed before generating the bracket"`) if `checkInClosed === false`. When `checkInClosed === true` and `players` is omitted, bracket generation uses only entrants where `checkedIn === true`. Explicit `players` in the request body bypasses both checks (preserving backward compatibility with existing tests).
+- `GET /api/tournaments/:id/entrants` — each entrant object in the response includes `checkedIn: boolean`.
+- `GET /api/tournaments/:id` — response includes `checkInClosed: boolean` on the tournament and `checkedIn: boolean` on each embedded entrant object.
+- `GET /api/tournaments` — each summary object in the list response includes `checkInClosed: boolean`.
+
+`:entrantId` in the path is the `userId` of the entrant (consistent with how other routes reference entrants).
 
 ## 3. Frontend Surface
 
 ### API client (`frontend/src/api.ts`)
-Add three methods and extend the two existing DTOs:
 
-- `checkInEntrant(tournamentId, entrantId) → Promise<{ entrant }>`
-- `uncheckInEntrant(tournamentId, entrantId) → Promise<{ entrant }>`
-- `closeCheckIn(tournamentId) → Promise<{ tournament }>`
-- Extend `TournamentDetail.entrants[]` with `checkedIn: boolean`.
-- Extend `TournamentSummary` / `TournamentDetail` with `checkInClosed: boolean`.
-- Extend `GetEntrants` return type with `checkedIn: boolean`.
+New types and updated DTOs:
+
+- `EntrantRecord` interface: `{ userId, displayName, gameSelection, registeredAt, checkedIn: boolean }`.
+- `TournamentSummary` includes `checkInClosed: boolean`.
+- `TournamentDetail` extends `TournamentSummary` and includes `entrants: EntrantRecord[]`.
+- `getEntrants` return type: `{ tournamentId: string; count: number; entrants: EntrantRecord[] }`.
+
+New API methods:
+
+```ts
+checkInEntrant(tournamentId: string, entrantId: string): Promise<EntrantRecord>
+// POST /api/tournaments/:id/checkin/:entrantId
+
+uncheckInEntrant(tournamentId: string, entrantId: string): Promise<EntrantRecord>
+// DELETE /api/tournaments/:id/checkin/:entrantId
+
+closeCheckIn(tournamentId: string): Promise<{
+  id: string;
+  name: string;
+  game: string;
+  maxEntrants: number | null;
+  registrationOpen: boolean;
+  checkInClosed: boolean;
+}>
+// POST /api/tournaments/:id/checkin/close
+```
 
 ### New page
 `frontend/src/pages/TournamentCheckInPage.tsx`, reached at route `/t/:id/checkin` (organizer only). Contents:

@@ -1,0 +1,9 @@
+{
+  "name": "claude-review-script",
+  "private": true,
+  "type": "module",
+  "description": "Helper script that calls the Anthropic API to produce a structured PR review.",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0"
+  }
+}
