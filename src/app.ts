@@ -8,6 +8,7 @@ import tournamentRoutes from "./routes/tournaments.js";
 import userRoutes from "./routes/users.js";
 import replayRoutes from "./routes/replays.js";
 import eventRoutes from "./routes/events.js";
+import leaderboardRoutes from "./routes/leaderboard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +32,7 @@ export function createApp() {
   app.use("/api/replays", replayRoutes);
   app.use("/api/notifications", notificationRoutes);
   app.use("/api/events", eventRoutes);
+  app.use("/api/leaderboard", leaderboardRoutes);
 
   const isProd = process.env.NODE_ENV === "production";
   if (isProd) {

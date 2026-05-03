@@ -691,3 +691,135 @@ export function searchEvents(params: EventSearchParams): EventResponse[] {
     registrationOpen: t.registrationOpen,
   }));
 }
+
+/* ------------------------------------------------------------------ */
+/*  Leaderboard Functions                                             */
+/* ------------------------------------------------------------------ */
+
+// Points system based on placement
+function getPointsForPlacement(placement: number): number {
+  if (placement === 1) return 100;
+  if (placement === 2) return 75;
+  if (placement <= 4) return 50;
+  if (placement <= 8) return 25;
+  return 10; // Participation points
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  displayName: string;
+  points: number;
+  totalWins: number;
+  totalTournaments: number;
+}
+
+export interface LeaderboardResponse {
+  data: LeaderboardEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  playerRank?: LeaderboardEntry;
+}
+
+export function getLeaderboard(params: {
+  game: string;
+  player_id?: string;
+  page?: number;
+  page_size?: number;
+}): LeaderboardResponse | null {
+  const { game, player_id, page = 1, page_size = 20 } = params;
+
+  if (!game) return null;
+
+  const gameLower = game.toLowerCase();
+
+  // Validate pagination
+  const validPage = Math.max(1, Number.isInteger(page) && page > 0 ? page : 1);
+  const validPageSize = Math.min(
+    100,
+    Math.max(1, Number.isInteger(page_size) && page_size > 0 ? page_size : 20)
+  );
+
+  // Aggregate player stats across finalized tournaments
+  const playerStats = new Map<
+    string,
+    { points: number; wins: number; tournaments: number; displayName: string }
+  >();
+
+  for (const tournament of tournaments.values()) {
+    if (!tournament.finalized) continue;
+    if (tournament.game.toLowerCase() !== gameLower) continue;
+
+    const results = matchResults.get(tournament.id);
+    if (!results) continue;
+
+    for (const [userId, result] of results) {
+      const user = users.get(userId);
+      if (!user) continue;
+
+      const stats = playerStats.get(userId) ?? {
+        points: 0,
+        wins: 0,
+        tournaments: 0,
+        displayName: user.displayName,
+      };
+
+      stats.points += getPointsForPlacement(result.placement);
+      stats.wins += result.wins;
+      stats.tournaments += 1;
+
+      playerStats.set(userId, stats);
+    }
+  }
+
+  // Convert to array and sort
+  const entries: LeaderboardEntry[] = Array.from(playerStats.entries())
+    .map(([userId, stats]) => ({
+      rank: 0, // Will be assigned after sorting
+      userId,
+      displayName: stats.displayName,
+      points: stats.points,
+      totalWins: stats.wins,
+      totalTournaments: stats.tournaments,
+    }))
+    .sort((a, b) => {
+      // Sort by points descending
+      if (b.points !== a.points) return b.points - a.points;
+      // Tiebreaker 1: total wins descending
+      if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+      // Tiebreaker 2: total tournaments descending
+      if (b.totalTournaments !== a.totalTournaments) return b.totalTournaments - a.totalTournaments;
+      // Tiebreaker 3: userId alphabetically
+      return a.userId.localeCompare(b.userId);
+    });
+
+  // Assign ranks
+  entries.forEach((entry, index) => {
+    entry.rank = index + 1;
+  });
+
+  const total = entries.length;
+  const totalPages = Math.ceil(total / validPageSize);
+
+  // Find player rank if requested
+  let playerRank: LeaderboardEntry | undefined;
+  if (player_id) {
+    playerRank = entries.find((e) => e.userId === player_id);
+  }
+
+  // Apply pagination
+  const startIndex = (validPage - 1) * validPageSize;
+  const endIndex = startIndex + validPageSize;
+  const paginatedEntries = entries.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedEntries,
+    total,
+    page: validPage,
+    pageSize: validPageSize,
+    totalPages,
+    playerRank,
+  };
+}
