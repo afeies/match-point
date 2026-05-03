@@ -153,3 +153,15 @@ export interface Follow {
   followingId: string; // User being followed
   createdAt: string;
 }
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  priceId: string;
+  status: "pending" | "active" | "cancelled" | "expired" | "inactive";
+  createdAt: string;
+  activatedAt?: string;
+  expiryDate?: string;
+  cancelledAt?: string;
+  clientSecret?: string;
+}
