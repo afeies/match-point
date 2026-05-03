@@ -131,3 +131,15 @@ export interface UserStats {
   totalLosses: number;
   bestPlacement: number | null;
 }
+
+export interface Replay {
+  id: string;
+  tournamentId: string;
+  title: string;
+  game: string;
+  playerNames: string[];
+  uploadedBy: string; // organizer user ID
+  videoUrl: string; // simulated URL for now
+  uploadedAt: string;
+  fileSize: number; // in bytes
+}

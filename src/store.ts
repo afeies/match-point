@@ -15,6 +15,7 @@ import type {
   User,
   UserRole,
   UserStats,
+  Replay,
 } from "./types.js";
 
 const users = new Map<string, User>();
@@ -25,6 +26,8 @@ const entrantsByTournament = new Map<string, Entrant[]>();
 const bracketsByTournament = new Map<string, BracketResponse>();
 const matchResults = new Map<string, Map<string, MatchResult>>();
 const notificationsById = new Map<string, MatchCallNotification>();
+const replays = new Map<string, Replay>();
+const replaysByTournament = new Map<string, string[]>();
 const matchReadyNotificationKeys = new Set<string>();
 
 function matchReadyKey(tournamentId: string, matchId: string, playerId: string): string {
@@ -488,4 +491,59 @@ export function __resetStoreForTests(): void {
   matchResults.clear();
   notificationsById.clear();
   matchReadyNotificationKeys.clear();
+  replays.clear();
+  replaysByTournament.clear();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Replay Functions                                                  */
+/* ------------------------------------------------------------------ */
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB
+
+export function createReplay(input: {
+  tournamentId: string;
+  title: string;
+  game: string;
+  playerNames: string[];
+  uploadedBy: string;
+  videoUrl: string;
+  fileSize: number;
+}): Replay {
+  const replay: Replay = {
+    id: randomUUID(),
+    tournamentId: input.tournamentId,
+    title: input.title,
+    game: input.game,
+    playerNames: input.playerNames,
+    uploadedBy: input.uploadedBy,
+    videoUrl: input.videoUrl,
+    uploadedAt: new Date().toISOString(),
+    fileSize: input.fileSize,
+  };
+
+  replays.set(replay.id, replay);
+
+  // Add to tournament's replay list
+  const tournamentReplays = replaysByTournament.get(input.tournamentId) ?? [];
+  tournamentReplays.push(replay.id);
+  replaysByTournament.set(input.tournamentId, tournamentReplays);
+
+  return replay;
+}
+
+export function getReplayById(id: string): Replay | undefined {
+  return replays.get(id);
+}
+
+export function getReplaysByTournament(tournamentId: string): Replay[] {
+  const replayIds = replaysByTournament.get(tournamentId) ?? [];
+  return replayIds
+    .map((id) => replays.get(id))
+    .filter((r): r is Replay => r !== undefined)
+    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+}
+
+export function validateReplayFileSize(fileSize: number): boolean {
+  return fileSize > 0 && fileSize <= MAX_FILE_SIZE;
 }

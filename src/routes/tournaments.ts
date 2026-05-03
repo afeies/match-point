@@ -18,6 +18,7 @@ import {
   setTournamentBracket,
   submitMatchScore,
   updateTournament,
+  getReplaysByTournament,
 } from "../store.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 import { requireAuth, requireOrganizer } from "../middleware/auth.js";
@@ -488,6 +489,14 @@ router.get("/:id", (req, res) => {
     checkInClosed: tournament.checkInClosed,
     entrants,
   });
+});
+
+/* ------------------------------------------------------------------ */
+/*  GET /api/tournaments/:id/replays – list replays for tournament    */
+/* ------------------------------------------------------------------ */
+router.get("/:id/replays", (req, res) => {
+  const replays = getReplaysByTournament(req.params.id);
+  res.json(replays);
 });
 
 export default router;
