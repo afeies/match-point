@@ -16,6 +16,7 @@ import type {
   UserRole,
   UserStats,
   Replay,
+  Follow,
 } from "./types.js";
 
 const users = new Map<string, User>();
@@ -28,6 +29,9 @@ const matchResults = new Map<string, Map<string, MatchResult>>();
 const notificationsById = new Map<string, MatchCallNotification>();
 const replays = new Map<string, Replay>();
 const replaysByTournament = new Map<string, string[]>();
+const follows = new Map<string, Follow>();
+const followersByUser = new Map<string, Set<string>>(); // userId -> Set of follower IDs
+const followingByUser = new Map<string, Set<string>>(); // userId -> Set of following IDs
 const matchReadyNotificationKeys = new Set<string>();
 
 function matchReadyKey(tournamentId: string, matchId: string, playerId: string): string {
@@ -498,6 +502,9 @@ export function __resetStoreForTests(): void {
   notificationsById.clear();
   matchReadyNotificationKeys.clear();
   replays.clear();
+  follows.clear();
+  followersByUser.clear();
+  followingByUser.clear();
   replaysByTournament.clear();
 }
 
@@ -822,4 +829,135 @@ export function getLeaderboard(params: {
     totalPages,
     playerRank,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Follow Functions                                                  */
+/* ------------------------------------------------------------------ */
+
+export function createFollow(followerId: string, followingId: string): Follow | null {
+  // Validate users exist
+  if (!users.has(followerId) || !users.has(followingId)) {
+    return null;
+  }
+
+  // Check if already following
+  const existingFollows = followingByUser.get(followerId) ?? new Set();
+  if (existingFollows.has(followingId)) {
+    return null; // Already following
+  }
+
+  const follow: Follow = {
+    id: randomUUID(),
+    followerId,
+    followingId,
+    createdAt: new Date().toISOString(),
+  };
+
+  follows.set(follow.id, follow);
+
+  // Update indexes
+  const following = followingByUser.get(followerId) ?? new Set();
+  following.add(followingId);
+  followingByUser.set(followerId, following);
+
+  const followers = followersByUser.get(followingId) ?? new Set();
+  followers.add(followerId);
+  followersByUser.set(followingId, followers);
+
+  return follow;
+}
+
+export function deleteFollow(followId: string, requesterId: string): "ok" | "not_found" | "forbidden" {
+  const follow = follows.get(followId);
+  if (!follow) return "not_found";
+
+  // Only the follower can unfollow
+  if (follow.followerId !== requesterId) return "forbidden";
+
+  follows.delete(followId);
+
+  // Update indexes
+  const following = followingByUser.get(follow.followerId);
+  if (following) {
+    following.delete(follow.followingId);
+  }
+
+  const followers = followersByUser.get(follow.followingId);
+  if (followers) {
+    followers.delete(follow.followerId);
+  }
+
+  return "ok";
+}
+
+export interface PaginatedUsers {
+  data: PublicUserProfile[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export function getUserFollowing(userId: string, page = 1, page_size = 20): PaginatedUsers {
+  const validPage = Math.max(1, Number.isInteger(page) && page > 0 ? page : 1);
+  const validPageSize = Math.min(
+    100,
+    Math.max(1, Number.isInteger(page_size) && page_size > 0 ? page_size : 20)
+  );
+
+  const followingIds = Array.from(followingByUser.get(userId) ?? []);
+  const followingUsers = followingIds
+    .map((id) => users.get(id))
+    .filter((u): u is User => u !== undefined && !u.deletedAt)
+    .map((u) => toPublicUserProfile(u));
+
+  const total = followingUsers.length;
+  const totalPages = Math.ceil(total / validPageSize);
+
+  const startIndex = (validPage - 1) * validPageSize;
+  const endIndex = startIndex + validPageSize;
+  const paginatedUsers = followingUsers.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedUsers,
+    total,
+    page: validPage,
+    pageSize: validPageSize,
+    totalPages,
+  };
+}
+
+export function getUserFollowers(userId: string, page = 1, page_size = 20): PaginatedUsers {
+  const validPage = Math.max(1, Number.isInteger(page) && page > 0 ? page : 1);
+  const validPageSize = Math.min(
+    100,
+    Math.max(1, Number.isInteger(page_size) && page_size > 0 ? page_size : 20)
+  );
+
+  const followerIds = Array.from(followersByUser.get(userId) ?? []);
+  const followerUsers = followerIds
+    .map((id) => users.get(id))
+    .filter((u): u is User => u !== undefined && !u.deletedAt)
+    .map((u) => toPublicUserProfile(u));
+
+  const total = followerUsers.length;
+  const totalPages = Math.ceil(total / validPageSize);
+
+  const startIndex = (validPage - 1) * validPageSize;
+  const endIndex = startIndex + validPageSize;
+  const paginatedUsers = followerUsers.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedUsers,
+    total,
+    page: validPage,
+    pageSize: validPageSize,
+    totalPages,
+  };
+}
+
+export function isFollowing(followerId: string, followingId: string): boolean {
+  const following = followingByUser.get(followerId);
+  return following ? following.has(followingId) : false;
 }
