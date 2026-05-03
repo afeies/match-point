@@ -102,6 +102,55 @@ export function reportBracketMatchWinner(
   return { bracket, newlyReadyMatchIds: newlyReady };
 }
 
+export function submitMatchScore(
+  tournamentId: string,
+  matchId: string,
+  player1Score: number,
+  player2Score: number
+): { match: import("./types.js").BracketMatch; bracket: BracketResponse } | undefined {
+  const bracket = bracketsByTournament.get(tournamentId);
+  if (!bracket) return undefined;
+
+  const match = findMatch(bracket, matchId);
+  if (!match) return undefined;
+
+  // Validate match is not already complete
+  if (match.status === "complete") {
+    throw new Error("Match is already complete and cannot be updated");
+  }
+
+  // Validate scores
+  if (player1Score < 0 || player2Score < 0) {
+    throw new Error("Scores cannot be negative");
+  }
+
+  if (!Number.isInteger(player1Score) || !Number.isInteger(player2Score)) {
+    throw new Error("Scores must be integers");
+  }
+
+  if (player1Score === player2Score) {
+    throw new Error("Scores cannot be tied - there must be a winner");
+  }
+
+  // Determine winner
+  const winnerUserId =
+    player1Score > player2Score ? match.player1?.userId : match.player2?.userId;
+
+  if (!winnerUserId) {
+    throw new Error("Cannot determine winner - missing player data");
+  }
+
+  // Update match scores
+  match.player1Score = player1Score;
+  match.player2Score = player2Score;
+
+  // Advance winner to next round (this will set winnerUserId and status to complete)
+  const newlyReady = applyMatchWinner(bracket, matchId, winnerUserId);
+  enqueueMatchReadyNotifications(tournamentId, newlyReady);
+
+  return { match, bracket };
+}
+
 export function setMatchStationLabel(
   tournamentId: string,
   matchId: string,
@@ -299,7 +348,37 @@ export function setTournamentBracket(tournamentId: string, bracket: BracketRespo
 }
 
 export function getTournamentBracket(tournamentId: string): BracketResponse | undefined {
-  return bracketsByTournament.get(tournamentId);
+  const bracket = bracketsByTournament.get(tournamentId);
+  if (!bracket) return undefined;
+
+  // Check if tournament is complete and add winner
+  const finalRound = bracket.rounds[bracket.rounds.length - 1];
+  if (finalRound && finalRound.matches.length > 0) {
+    const finalMatch = finalRound.matches[0];
+    if (finalMatch && finalMatch.status === "complete" && finalMatch.winnerUserId) {
+      const winner =
+        finalMatch.player1?.userId === finalMatch.winnerUserId
+          ? finalMatch.player1
+          : finalMatch.player2;
+      return {
+        ...bracket,
+        tournamentWinner: winner ?? null,
+      };
+    }
+  }
+
+  // Handle single-player tournament
+  if (bracket.playerCount === 1 && bracket.rounds.length > 0) {
+    const firstMatch = bracket.rounds[0]?.matches[0];
+    if (firstMatch?.player1) {
+      return {
+        ...bracket,
+        tournamentWinner: firstMatch.player1,
+      };
+    }
+  }
+
+  return bracket;
 }
 
 export function setMatchResult(
