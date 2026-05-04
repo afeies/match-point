@@ -82,6 +82,35 @@ export interface MatchCallNotificationDTO {
   createdAt: string;
 }
 
+export interface ReplayDTO {
+  id: string;
+  title: string;
+  tournamentId: string;
+  tournamentName: string;
+  game: string;
+  player1Name: string;
+  player2Name: string;
+  uploadDate: string;
+  videoUrl: string;
+  fileSizeBytes: number;
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  displayName: string;
+  rank: number;
+  points: number;
+  totalWins: number;
+  totalTournaments: number;
+}
+
+export interface FollowDTO {
+  id: string;
+  followerId: string;
+  followedId: string;
+  createdAt: string;
+}
+
 export interface BracketRound {
   round: number;
   matches: BracketMatch[];
@@ -305,5 +334,104 @@ export const api = {
       method: "POST",
       headers: jsonHeaders,
     });
+  },
+
+  // Replays
+  searchReplays(params?: {
+    game?: string;
+    eventId?: string;
+    playerName?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{
+    data: ReplayDTO[];
+    page: number;
+    pageSize: number;
+    total: number;
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.game) searchParams.set("game", params.game);
+    if (params?.eventId) searchParams.set("event_id", params.eventId);
+    if (params?.playerName) searchParams.set("player_name", params.playerName);
+    if (params?.page) searchParams.set("page", params.page.toString());
+    if (params?.pageSize) searchParams.set("page_size", params.pageSize.toString());
+    const query = searchParams.toString();
+    const path = query ? `/api/replays?${query}` : "/api/replays";
+    return request(path, { auth: false });
+  },
+
+  createReplay(body: {
+    title: string;
+    tournamentId: string;
+    game: string;
+    player1Name: string;
+    player2Name: string;
+    videoUrl: string;
+    fileSizeBytes: number;
+  }): Promise<ReplayDTO> {
+    return request("/api/replays", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: jsonHeaders,
+    });
+  },
+
+  getReplay(id: string): Promise<ReplayDTO> {
+    return request(`/api/replays/${id}`, { auth: false });
+  },
+
+  // Leaderboard
+  getLeaderboard(params?: {
+    game?: string;
+    region?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{
+    data: LeaderboardEntry[];
+    page: number;
+    pageSize: number;
+    total: number;
+  }> {
+    const searchParams = new URLSearchParams();
+    if (params?.game) searchParams.set("game", params.game);
+    if (params?.region) searchParams.set("region", params.region);
+    if (params?.page) searchParams.set("page", params.page.toString());
+    if (params?.pageSize) searchParams.set("page_size", params.pageSize.toString());
+    const query = searchParams.toString();
+    const path = query ? `/api/leaderboard?${query}` : "/api/leaderboard";
+    return request(path, { auth: false });
+  },
+
+  // Follows
+  followUser(userId: string): Promise<FollowDTO> {
+    return request("/api/follows", {
+      method: "POST",
+      body: JSON.stringify({ targetUserId: userId }),
+      headers: jsonHeaders,
+    });
+  },
+
+  unfollowUser(followId: string): Promise<{ ok: boolean }> {
+    return request(`/api/follows/${followId}`, {
+      method: "DELETE",
+    });
+  },
+
+  getFollowing(userId: string): Promise<{
+    data: UserProfile[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    return request(`/api/users/${userId}/following`);
+  },
+
+  getFollowers(userId: string): Promise<{
+    data: UserProfile[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    return request(`/api/users/${userId}/followers`);
   },
 };

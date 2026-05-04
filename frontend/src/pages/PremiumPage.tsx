@@ -36,10 +36,10 @@ export function PremiumPage() {
           </div>
 
           <div style={{ fontSize: "2.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>
-            $29<span style={{ fontSize: "1.25rem", fontWeight: 400, color: "var(--dash-muted)" }}>/month</span>
+            $15<span style={{ fontSize: "1.25rem", fontWeight: 400, color: "var(--dash-muted)" }}>/year</span>
           </div>
           <p style={{ fontSize: "0.875rem", color: "var(--dash-muted)", marginBottom: "1.5rem" }}>
-            Or $290/year (save $58)
+            Billed annually
           </p>
 
           <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>What's included</h3>

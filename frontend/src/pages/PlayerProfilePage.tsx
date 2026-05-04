@@ -10,6 +10,8 @@ import {
   Plus,
   RefreshCw,
   X,
+  UserPlus,
+  UserMinus,
 } from "lucide-react";
 import { useAuth } from "../auth-context";
 import { api, type HistoryEntry, type UserProfile } from "../api";
@@ -45,6 +47,13 @@ export function PlayerProfilePage() {
   const [selectedGame, setSelectedGame] = useState<string>("all");
   const [availableGames, setAvailableGames] = useState<string[]>([]);
 
+  // Follow state
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followId, setFollowId] = useState<string | null>(null);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+
   const loadProfile = useCallback(async () => {
     if (!profileId) return;
     setPageState("loading");
@@ -53,11 +62,35 @@ export function PlayerProfilePage() {
       const data = await api.getUser(profileId);
       setProfile(data);
       setPageState(data.games.length === 0 ? "empty" : "view");
+      
+      // Load follow status if viewing someone else's profile
+      if (authUser && !isOwnProfile) {
+        try {
+          const following = await api.getFollowing(authUser.id);
+          const followEntry = following.data.find((f) => f.id === profileId);
+          setIsFollowing(!!followEntry);
+          // Note: followId would need to be returned from the API
+        } catch {
+          // Not critical if this fails
+        }
+      }
+      
+      // Load followers/following counts
+      try {
+        const [followers, following] = await Promise.all([
+          api.getFollowers(profileId),
+          api.getFollowing(profileId),
+        ]);
+        setFollowersCount(followers.total);
+        setFollowingCount(following.total);
+      } catch {
+        // Not critical if this fails
+      }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load profile");
       setPageState("error");
     }
-  }, [profileId]);
+  }, [profileId, authUser, isOwnProfile]);
 
   const loadHistory = useCallback(async () => {
     if (!profileId) return;
@@ -111,7 +144,30 @@ export function PlayerProfilePage() {
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (editGames.length === 0) {
-      setEditError("Add at least one game.");
+   
+
+  async function handleFollowToggle() {
+    if (!authUser || !profileId) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing && followId) {
+        await api.unfollowUser(followId);
+        setIsFollowing(false);
+        setFollowId(null);
+        setFollowersCount((c) => Math.max(0, c - 1));
+      } else {
+        const result = await api.followUser(profileId);
+        setIsFollowing(true);
+        setFollowId(result.id);
+        setFollowersCount((c) => c + 1);
+      }
+    } catch (err) {
+      // Show error but don't break the UI
+      console.error("Follow action failed:", err);
+    } finally {
+      setFollowLoading(false);
+    }
+  }   setEditError("Add at least one game.");
       return;
     }
     setEditLoading(true);
@@ -247,15 +303,44 @@ export function PlayerProfilePage() {
               <div className="pp-hint-card">
                 <Globe size={22} className="pp-hint-icon" />
                 <div>
-                  <h4>Update your region</h4>
-                  <p>
-                    MatchPoint uses your region to find local community tournaments.
-                  </p>
-                  <button className="pp-hint-link" onClick={openEdit}>
-                    SET LOCATION →
-                  </button>
-                </div>
+              <div className="pp-follow-stats">
+                <span className="pp-follow-stat">
+                  <strong>{followersCount}</strong> Followers
+                </span>
+                <span className="pp-follow-stat">
+                  <strong>{followingCount}</strong> Following
+                </span>
               </div>
+            </div>
+            <div className="pp-header-actions">
+              {isOwnProfile && pageState === "view" && (
+                <button className="pp-btn-outline" onClick={openEdit}>
+                  <Edit2 size={15} />
+                  Edit Profile
+                </button>
+              )}
+              {!isOwnProfile && authUser && (
+                <button
+                  className={isFollowing ? "pp-btn-outline" : "pp-btn-primary"}
+                  onClick={handleFollowToggle}
+                  disabled={followLoading}
+                >
+                  {followLoading ? (
+                    <RefreshCw size={15} className="pp-spinner-small" />
+                  ) : isFollowing ? (
+                    <>
+                      <UserMinus size={15} />
+                      Unfollow
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={15} />
+                      Follow
+                    </>
+                  )}
+                </button>
+              )}
+            </div></div>
               <div className="pp-hint-card">
                 <Plus size={22} className="pp-hint-icon" />
                 <div>

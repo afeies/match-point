@@ -11,6 +11,8 @@ import {
   Trophy,
   Users,
   X,
+  Film,
+  TrendingUp,
 } from "lucide-react";
 import { api, type MatchCallNotificationDTO } from "../api";
 import { useAuth } from "../auth-context";
@@ -181,6 +183,8 @@ export function DashboardLayout({ children }: { children?: ReactNode }) {
             <NavItem to="/dashboard" icon={LayoutDashboard} label="Dashboard" />
             <TournamentsNavLink />
             <NavItem to="/players" icon={Users} label="Players" />
+            <NavItem to="/replays" icon={Film} label="Replays" />
+            <NavItem to="/leaderboard" icon={TrendingUp} label="Leaderboard" />
             <NavItem to="/settings" icon={Settings} label="Settings" />
           </nav>
           {isPublicBracketRoute ? (

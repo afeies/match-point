@@ -14,6 +14,9 @@ import { PlayerProfilePage } from "./pages/PlayerProfilePage";
 import { PlayersPage } from "./pages/PlayersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PremiumPage } from "./pages/PremiumPage";
+import { ReplaysPage } from "./pages/ReplaysPage";
+import { ReplayUploadPage } from "./pages/ReplayUploadPage";
+import { LeaderboardPage } from "./pages/LeaderboardPage";
 
 export default function App() {
   return (
@@ -56,6 +59,9 @@ export default function App() {
             <Route path="/tournaments" element={<Navigate to="/tournament" replace />} />
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/players/:id" element={<PlayerProfilePage />} />
+            <Route path="/replays" element={<ReplaysPage />} />
+            <Route path="/replays/upload" element={<ReplayUploadPage />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/premium" element={<PremiumPage />} />
             <Route path="/new" element={<NewTournament />} />
