@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { AuthProvider } from "../src/auth-context";
 import {
   hashStr,
   mockScores,
@@ -337,9 +338,11 @@ describe("TournamentBracketPage – component", () => {
     vi.mocked(api.getTournament).mockReturnValue(new Promise(() => {}));
     vi.mocked(api.getTournamentBracket).mockReturnValue(new Promise(() => {}));
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     expect(screen.getByText(/loading bracket/i)).toBeInTheDocument();
   });
@@ -351,15 +354,16 @@ describe("TournamentBracketPage – component", () => {
       game: "CS2",
       entrantCount: 0,
       maxEntrants: null,
-      registrationOpen: true,
-      createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue(null);
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText(/bracket not published yet/i)).toBeInTheDocument());
   });
@@ -370,9 +374,7 @@ describe("TournamentBracketPage – component", () => {
       name: "Apex Masters",
       game: "Apex",
       entrantCount: 2,
-      maxEntrants: null,
-      registrationOpen: true,
-      createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -382,9 +384,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText("Apex Masters")).toBeInTheDocument());
   });
@@ -398,16 +402,18 @@ describe("TournamentBracketPage – component", () => {
 
     vi.mocked(api.getTournament).mockResolvedValue({
       id: "t-abc", name: "Test", game: "G", entrantCount: 2, maxEntrants: null,
-      registrationOpen: true, createdAt: "2025-01-01", entrants: [],
+      registrationOpen: true, createdAt: "2025-01-01", checkInClosed: false, entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
       tournamentId: "t-abc", playerCount: 2, roundCount: 1,
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => screen.getByText("COPY"));
     fireEvent.click(screen.getByText("COPY"));
@@ -423,6 +429,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -432,9 +439,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText("Event")).toBeInTheDocument());
     expect(vi.mocked(api.getTournament)).toHaveBeenCalledWith("t-abc");
@@ -450,6 +459,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -459,9 +469,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(setCurrentEventTitle).toHaveBeenCalledWith("Winter Cup"));
   });
@@ -475,6 +487,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -484,9 +497,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     const { unmount } = render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText("X")).toBeInTheDocument());
     unmount();
@@ -497,9 +512,11 @@ describe("TournamentBracketPage – component", () => {
     vi.mocked(api.getTournament).mockRejectedValue(new Error("Tournament missing"));
     vi.mocked(api.getTournamentBracket).mockResolvedValue(null);
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText("Tournament missing")).toBeInTheDocument());
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/tournament");
@@ -514,6 +531,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -523,9 +541,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText(/bracket ready/i)).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
@@ -544,6 +564,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -553,9 +574,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => screen.getByRole("button", { name: /share/i }));
     fireEvent.click(screen.getByRole("button", { name: /share/i }));
@@ -575,6 +598,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -584,9 +608,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => screen.getByRole("button", { name: /export/i }));
     fireEvent.click(screen.getByRole("button", { name: /export/i }));
@@ -604,6 +630,7 @@ describe("TournamentBracketPage – component", () => {
       maxEntrants: null,
       registrationOpen: true,
       createdAt: "2025-01-01",
+      checkInClosed: false,
       entrants: [],
     });
     vi.mocked(api.getTournamentBracket).mockResolvedValue({
@@ -613,9 +640,11 @@ describe("TournamentBracketPage – component", () => {
       rounds: [{ round: 1, matches: [makeMatch({ id: "m1", player1: p1, player2: p2 })] }],
     });
     render(
-      <MemoryRouter>
-        <TournamentBracketPage />
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <TournamentBracketPage />
+        </MemoryRouter>
+      </AuthProvider>
     );
     await waitFor(() => expect(screen.getByText(/next match/i)).toBeInTheDocument());
     expect(screen.getByText(/Alice vs Bob|warming up/i)).toBeInTheDocument();

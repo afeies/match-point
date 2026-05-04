@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import { Check, Download, Share2, X } from "lucide-react";
+import { Check, Download, Share2, X, Trophy, Save } from "lucide-react";
 import type { BracketMatch, BracketResponse, BracketRound } from "../api";
 import { api, type TournamentDetail } from "../api";
+import { useAuth } from "../auth-context";
 import "../styles/bracket-view-page.css";
+import "../styles/features.css";
 
 type OutletCtx = { setCurrentEventTitle: (t: string | null) => void };
 
@@ -226,11 +228,22 @@ export function nextMatchLabel(bracket: BracketResponse, liveId: string | null):
 export function TournamentBracketPage() {
   const { id } = useParams<{ id: string }>();
   const { setCurrentEventTitle } = useOutletContext<OutletCtx>();
+  const { user } = useAuth();
   const [detail, setDetail] = useState<TournamentDetail | null>(null);
   const [bracket, setBracket] = useState<BracketResponse | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  // Score tracking state
+  const [selectedMatch, setSelectedMatch] = useState<BracketMatch | null>(null);
+  const [player1Score, setPlayer1Score] = useState("");
+  const [player2Score, setPlayer2Score] = useState("");
+  const [scoreLoading, setScoreLoading] = useState(false);
+  const [scoreError, setScoreError] = useState<string | null>(null);
+  const [scoreSuccess, setScoreSuccess] = useState(false);
+
+  const isOrganizer = user?.role === "organizer";
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -289,6 +302,50 @@ export function TournamentBracketPage() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
+
+  async function handleScoreSubmit() {
+    if (!selectedMatch || !selectedMatch.player1 || !selectedMatch.player2) return;
+    
+    const p1Score = parseInt(player1Score);
+    const p2Score = parseInt(player2Score);
+
+    if (isNaN(p1Score) || isNaN(p2Score)) {
+      setScoreError("Please enter valid scores");
+      return;
+    }
+
+    if (p1Score === p2Score) {
+      setScoreError("Scores cannot be tied");
+      return;
+    }
+
+    const winnerUserId = p1Score > p2Score ? selectedMatch.player1.userId : selectedMatch.player2.userId;
+
+    try {
+      setScoreLoading(true);
+      setScoreError(null);
+      await api.reportMatchScore(selectedMatch.id, {
+        player1Score: p1Score,
+        player2Score: p2Score,
+        winnerUserId,
+      });
+      setScoreSuccess(true);
+      setTimeout(() => {
+        setScoreSuccess(false);
+        setSelectedMatch(null);
+        setPlayer1Score("");
+        setPlayer2Score("");
+      }, 2000);
+    } catch (err) {
+      setScoreError(err instanceof Error ? err.message : "Failed to report score");
+    } finally {
+      setScoreLoading(false);
+    }
+  }
+
+  const activeBracketMatches = bracket?.rounds.flatMap((r) =>
+    r.matches.filter((m) => m.player1 && m.player2 && m.status !== "complete")
+  ) || [];
 
   if (err && !detail) {
     return (
@@ -403,6 +460,116 @@ export function TournamentBracketPage() {
           <p className="bv-next-body">{nextMatchLabel(bracket, liveId)}</p>
         </div>
       </div>
+
+      {/* Score Tracking Panel (Organizers Only) */}
+      {isOrganizer && activeBracketMatches.length > 0 && (
+        <div className="score-panel" style={{ marginTop: "2rem" }}>
+          <div className="score-header">
+            <h3>
+              <Trophy size={22} />
+              Report Match Score
+            </h3>
+          </div>
+
+          {scoreSuccess && (
+            <div className="success-banner">
+              <Check size={20} />
+              Score reported successfully!
+            </div>
+          )}
+
+          {scoreError && (
+            <div className="error-banner">
+              <X size={20} />
+              {scoreError}
+            </div>
+          )}
+
+          {!selectedMatch ? (
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ display: "block", marginBottom: "0.5rem", color: "var(--muted)", fontWeight: 600 }}>
+                Select Match
+              </label>
+              <select
+                onChange={(e) => {
+                  const match = activeBracketMatches.find((m) => m.id === e.target.value);
+                  setSelectedMatch(match || null);
+                  setPlayer1Score("");
+                  setPlayer2Score("");
+                  setScoreError(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  fontSize: "1rem",
+                }}
+              >
+                <option value="">Choose a match...</option>
+                {activeBracketMatches.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.player1?.displayName} vs {m.player2?.displayName} (Round {m.round})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              <div className="score-inputs">
+                <div className="score-player">
+                  <div className="score-player-name">{selectedMatch.player1?.displayName}</div>
+                  <input
+                    type="number"
+                    className="score-input"
+                    value={player1Score}
+                    onChange={(e) => setPlayer1Score(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+                <div className="score-vs">VS</div>
+                <div className="score-player">
+                  <div className="score-player-name">{selectedMatch.player2?.displayName}</div>
+                  <input
+                    type="number"
+                    className="score-input"
+                    value={player2Score}
+                    onChange={(e) => setPlayer2Score(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <button
+                  className="score-submit"
+                  onClick={handleScoreSubmit}
+                  disabled={scoreLoading || !player1Score || !player2Score}
+                >
+                  <Save size={20} />
+                  {scoreLoading ? "Saving..." : "Submit Score"}
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setSelectedMatch(null);
+                    setPlayer1Score("");
+                    setPlayer2Score("");
+                    setScoreError(null);
+                  }}
+                  style={{ flex: "0 0 auto" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

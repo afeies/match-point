@@ -306,4 +306,250 @@ export const api = {
       headers: jsonHeaders,
     });
   },
+
+  // US3: Live Score Tracking
+  reportMatchScore(
+    matchId: string,
+    body: { player1Score: number; player2Score: number; winnerUserId: string }
+  ): Promise<{ id: string; player1Score: number; player2Score: number; winnerUserId: string }> {
+    return request(`/api/matches/${matchId}/score`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: jsonHeaders,
+    });
+  },
+
+  getMatchScore(matchId: string): Promise<{
+    matchId: string;
+    player1Score: number;
+    player2Score: number;
+    winnerUserId: string;
+  } | null> {
+    return request(`/api/matches/${matchId}/score`).catch(() => null);
+  },
+
+  // US4: Replay Upload & Storage
+  uploadReplay(body: {
+    tournamentId: string;
+    videoUrl: string;
+    title: string;
+    playerNames: string[];
+    game: string;
+    fileSizeBytes: number;
+  }): Promise<{
+    id: string;
+    tournamentId: string;
+    videoUrl: string;
+    title: string;
+    playerNames: string[];
+    game: string;
+    fileSizeBytes: number;
+    uploadedAt: string;
+  }> {
+    return request("/api/replays", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: jsonHeaders,
+    });
+  },
+
+  getReplay(id: string): Promise<{
+    id: string;
+    tournamentId: string;
+    videoUrl: string;
+    title: string;
+    playerNames: string[];
+    game: string;
+    fileSizeBytes: number;
+    uploadedAt: string;
+  }> {
+    return request(`/api/replays/${id}`, { auth: false });
+  },
+
+  getTournamentReplays(tournamentId: string): Promise<
+    Array<{
+      id: string;
+      tournamentId: string;
+      videoUrl: string;
+      title: string;
+      playerNames: string[];
+      game: string;
+      fileSizeBytes: number;
+      uploadedAt: string;
+    }>
+  > {
+    return request(`/api/tournaments/${tournamentId}/replays`, { auth: false });
+  },
+
+  // US5: Replay Discovery & Browsing
+  searchReplays(params?: {
+    game?: string;
+    event_id?: string;
+    player_name?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    replays: Array<{
+      id: string;
+      tournamentId: string;
+      videoUrl: string;
+      title: string;
+      playerNames: string[];
+      game: string;
+      fileSizeBytes: number;
+      uploadedAt: string;
+    }>;
+    page: number;
+    page_size: number;
+    total: number;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.game) query.set("game", params.game);
+    if (params?.event_id) query.set("event_id", params.event_id);
+    if (params?.player_name) query.set("player_name", params.player_name);
+    if (params?.page) query.set("page", params.page.toString());
+    if (params?.page_size) query.set("page_size", params.page_size.toString());
+    const path = query.toString() ? `/api/replays?${query}` : "/api/replays";
+    return request(path, { auth: false });
+  },
+
+  // US7: Event Discovery & Filtering
+  searchEvents(params?: {
+    game?: string;
+    city?: string;
+  }): Promise<
+    Array<{
+      id: string;
+      name: string;
+      game: string;
+      startDate: string;
+      venue: string | null;
+      city: string | null;
+      entrantCount: number;
+    }>
+  > {
+    const query = new URLSearchParams();
+    if (params?.game) query.set("game", params.game);
+    if (params?.city) query.set("city", params.city);
+    const path = query.toString() ? `/api/events?${query}` : "/api/events";
+    return request(path, { auth: false });
+  },
+
+  // US8: Player Leaderboard
+  getLeaderboard(params: {
+    game: string;
+    player_id?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<{
+    leaderboard: Array<{
+      userId: string;
+      displayName: string;
+      points: number;
+      wins: number;
+      tournaments: number;
+      rank: number;
+    }>;
+    page: number;
+    page_size: number;
+    total: number;
+  }> {
+    const query = new URLSearchParams();
+    query.set("game", params.game);
+    if (params.player_id) query.set("player_id", params.player_id);
+    if (params.page) query.set("page", params.page.toString());
+    if (params.page_size) query.set("page_size", params.page_size.toString());
+    return request(`/api/leaderboard?${query}`, { auth: false });
+  },
+
+  // US9: Follow Players
+  followPlayer(targetUserId: string): Promise<{
+    id: string;
+    followerId: string;
+    followingId: string;
+    createdAt: string;
+  }> {
+    return request("/api/follows", {
+      method: "POST",
+      body: JSON.stringify({ targetUserId }),
+      headers: jsonHeaders,
+    });
+  },
+
+  unfollowPlayer(followId: string): Promise<{ ok: boolean }> {
+    return request(`/api/follows/${followId}`, {
+      method: "DELETE",
+    });
+  },
+
+  getUserFollowing(
+    userId: string,
+    params?: { page?: number; page_size?: number }
+  ): Promise<{
+    users: Array<{
+      id: string;
+      displayName: string;
+      games: string[];
+      region?: string;
+    }>;
+    page: number;
+    page_size: number;
+    total: number;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", params.page.toString());
+    if (params?.page_size) query.set("page_size", params.page_size.toString());
+    const path = query.toString()
+      ? `/api/users/${userId}/following?${query}`
+      : `/api/users/${userId}/following`;
+    return request(path, { auth: false });
+  },
+
+  getUserFollowers(
+    userId: string,
+    params?: { page?: number; page_size?: number }
+  ): Promise<{
+    users: Array<{
+      id: string;
+      displayName: string;
+      games: string[];
+      region?: string;
+    }>;
+    page: number;
+    page_size: number;
+    total: number;
+  }> {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", params.page.toString());
+    if (params?.page_size) query.set("page_size", params.page_size.toString());
+    const path = query.toString()
+      ? `/api/users/${userId}/followers?${query}`
+      : `/api/users/${userId}/followers`;
+    return request(path, { auth: false });
+  },
+
+  // US10: Premium Subscription
+  createSubscription(priceId: string): Promise<{
+    subscriptionId: string;
+    clientSecret: string;
+  }> {
+    return request("/api/subscriptions", {
+      method: "POST",
+      body: JSON.stringify({ priceId }),
+      headers: jsonHeaders,
+    });
+  },
+
+  getSubscriptionStatus(userId: string): Promise<{
+    status: "active" | "pending" | "expired" | "cancelled" | "inactive";
+    expiryDate?: string;
+  }> {
+    return request(`/api/subscriptions/${userId}`, { auth: false });
+  },
+
+  cancelSubscription(subscriptionId: string): Promise<{ ok: boolean }> {
+    return request(`/api/subscriptions/${subscriptionId}`, {
+      method: "DELETE",
+    });
+  },
 };

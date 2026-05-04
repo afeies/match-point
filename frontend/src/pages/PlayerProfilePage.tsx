@@ -10,10 +10,13 @@ import {
   Plus,
   RefreshCw,
   X,
+  UserPlus,
+  UserMinus,
 } from "lucide-react";
 import { useAuth } from "../auth-context";
 import { api, type HistoryEntry, type UserProfile } from "../api";
 import "../styles/player-profile.css";
+import "../styles/features.css";
 
 type PageState = "loading" | "error" | "empty" | "view" | "edit";
 
@@ -44,6 +47,15 @@ export function PlayerProfilePage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedGame, setSelectedGame] = useState<string>("all");
   const [availableGames, setAvailableGames] = useState<string[]>([]);
+
+  // Follow state
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followId, setFollowId] = useState<string | null>(null);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followTab, setFollowTab] = useState<"following" | "followers">("following");
+  const [following, setFollowing] = useState<any[]>([]);
+  const [followers, setFollowers] = useState<any[]>([]);
+  const [followCounts, setFollowCounts] = useState({ following: 0, followers: 0 });
 
   const loadProfile = useCallback(async () => {
     if (!profileId) return;
@@ -88,9 +100,74 @@ export function PlayerProfilePage() {
     loadProfile();
   }, [ready, profileId, loadProfile, navigate]);
 
+  const loadFollowData = useCallback(async () => {
+    if (!profileId) return;
+    try {
+      const [followingData, followersData] = await Promise.all([
+        api.getUserFollowing(profileId, { pageSize: 100 }),
+        api.getUserFollowers(profileId, { pageSize: 100 }),
+      ]);
+      setFollowing(followingData.users);
+      setFollowers(followersData.users);
+      setFollowCounts({
+        following: followingData.total,
+        followers: followersData.total,
+      });
+      
+      // Check if current user is already following this profile
+      if (authUser && !isOwnProfile) {
+        const isAlreadyFollowing = followingData.users.some((u: any) => u.id === authUser.id);
+        setIsFollowing(isAlreadyFollowing);
+      }
+    } catch (err) {
+      console.error("Failed to load follow data:", err);
+    }
+  }, [profileId, authUser, isOwnProfile]);
+
   useEffect(() => {
     if (pageState === "view" || pageState === "edit") {
       loadHistory();
+      loadFollowData();
+    }
+  }, [pageState, loadHistory, loadFollowData]);
+
+  async function handleFollowToggle() {
+    if (!authUser || !profileId || isOwnProfile) return;
+
+    setFollowLoading(true);
+    try {
+      if (isFollowing && followId) {
+        await api.unfollowPlayer(followId);
+        setIsFollowing(false);
+        setFollowId(null);
+        setFollowCounts((c) => ({ ...c, followers: Math.max(0, c.followers - 1) }));
+      } else {
+        const result = await api.followPlayer(profileId);
+        setIsFollowing(true);
+        setFollowId(result.id);
+        setFollowCounts((c) => ({ ...c, followers: c.followers + 1 }));
+      }
+    } catch (err) {
+      console.error("Failed to toggle follow:", err);
+    } finally {
+      setFollowLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!profileId) {
+      const returnTo = encodeURIComponent("/players");
+      navigate(`/login?next=${returnTo}`, { replace: true });
+      return;
+    }
+    loadProfile();
+  }, [ready, profileId, loadProfile, navigate]);
+
+  useEffect(() => {
+    if (pageState === "view" || pageState === "edit") {
+      loadHistory();
+      loadFollowData();
     }
   }, [pageState, loadHistory]);
 
@@ -242,35 +319,38 @@ export function PlayerProfilePage() {
             )}
           </div>
 
-          {isOwnProfile && (
-            <div className="pp-empty-sidebar">
-              <div className="pp-hint-card">
-                <Globe size={22} className="pp-hint-icon" />
-                <div>
-                  <h4>Update your region</h4>
-                  <p>
-                    MatchPoint uses your region to find local community tournaments.
-                  </p>
+          {/* Hints */}
+          <div className="pp-empty-hints">
+            <div className="pp-hint-card">
+              <MapPin size={22} className="pp-hint-icon" />
+              <div>
+                <h4 className="pp-hint-title">Set Your Region</h4>
+                <p>
+                  MatchPoint uses your region to find local community tournaments.
+                </p>
+                {isOwnProfile && (
                   <button className="pp-hint-link" onClick={openEdit}>
                     SET LOCATION →
                   </button>
-                </div>
+                )}
               </div>
-              <div className="pp-hint-card">
-                <Plus size={22} className="pp-hint-icon" />
-                <div>
-                  <h4>Add your first game</h4>
-                  <p>
-                    Whether it's FPS, MOBA, or Fighting games, get your profile
-                    started.
-                  </p>
+            </div>
+            <div className="pp-hint-card">
+              <Plus size={22} className="pp-hint-icon" />
+              <div>
+                <h4 className="pp-hint-title">Add Competitive Games</h4>
+                <p>
+                  Whether it's FPS, MOBA, or Fighting games, get your profile
+                  started.
+                </p>
+                {isOwnProfile && (
                   <button className="pp-hint-link" onClick={openEdit}>
                     ADD GAME →
                   </button>
-                </div>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -302,14 +382,36 @@ export function PlayerProfilePage() {
                 </span>
               </div>
             </div>
-            {isOwnProfile && pageState === "view" && (
-              <div className="pp-header-actions">
+            <div className="pp-header-actions" style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+              {!isOwnProfile && authUser && pageState === "view" && (
+                <button
+                  className={isFollowing ? "follow-btn following" : "follow-btn"}
+                  onClick={handleFollowToggle}
+                  disabled={followLoading}
+                  style={{ minWidth: "120px" }}
+                >
+                  {followLoading ? (
+                    "..."
+                  ) : isFollowing ? (
+                    <>
+                      <UserMinus size={18} />
+                      Following
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={18} />
+                      Follow
+                    </>
+                  )}
+                </button>
+              )}
+              {isOwnProfile && pageState === "view" && (
                 <button className="pp-btn-outline" onClick={openEdit}>
                   <Edit2 size={15} />
                   Edit Profile
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Main view */}
@@ -331,6 +433,76 @@ export function PlayerProfilePage() {
                     </span>
                   ))}
                 </div>
+              </div>
+
+              {/* Follow Section */}
+              <div className="follow-section" style={{ marginTop: "2rem" }}>
+                <div className="follow-tabs">
+                  <button
+                    className={`follow-tab ${followTab === "following" ? "active" : ""}`}
+                    onClick={() => setFollowTab("following")}
+                  >
+                    Following ({followCounts.following})
+                  </button>
+                  <button
+                    className={`follow-tab ${followTab === "followers" ? "active" : ""}`}
+                    onClick={() => setFollowTab("followers")}
+                  >
+                    Followers ({followCounts.followers})
+                  </button>
+                </div>
+
+                {followTab === "following" && (
+                  <div className="follow-grid">
+                    {following.length === 0 ? (
+                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "2rem", color: "var(--muted)" }}>
+                        {isOwnProfile ? "You're not following anyone yet" : "Not following anyone yet"}
+                      </div>
+                    ) : (
+                      following.map((user) => (
+                        <Link key={user.id} to={`/players/${user.id}`} style={{ textDecoration: "none" }}>
+                          <div className="follow-card">
+                            <div className="follow-avatar">
+                              {user.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="follow-info">
+                              <h4 className="follow-name">{user.displayName}</h4>
+                              <div className="follow-games">
+                                {user.games.join(", ") || "No games listed"}
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {followTab === "followers" && (
+                  <div className="follow-grid">
+                    {followers.length === 0 ? (
+                      <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "2rem", color: "var(--muted)" }}>
+                        {isOwnProfile ? "No followers yet" : "No followers yet"}
+                      </div>
+                    ) : (
+                      followers.map((user) => (
+                        <Link key={user.id} to={`/players/${user.id}`} style={{ textDecoration: "none" }}>
+                          <div className="follow-card">
+                            <div className="follow-avatar">
+                              {user.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="follow-info">
+                              <h4 className="follow-name">{user.displayName}</h4>
+                              <div className="follow-games">
+                                {user.games.join(", ") || "No games listed"}
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Match History Section */}
